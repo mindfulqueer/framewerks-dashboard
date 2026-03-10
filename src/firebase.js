@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc } from "firebase/firestore";
+import { getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc, query, where, orderBy, limit } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyC6mtaBP6B4Jf7515VO9s1Z9dstYPY_5ew",
@@ -36,6 +36,36 @@ export async function loadLibrary() {
   const snap = await getDoc(doc(db, "config", "exerciseLibrary"));
   if (snap.exists()) return snap.data().exercises;
   return null;
+}
+
+// ─── Clients (Users) ────────────────────────────────────────────
+export async function loadClients() {
+  const snapshot = await getDocs(collection(db, "users"));
+  return snapshot.docs.map((d) => d.data());
+}
+
+export async function assignProgramToClient(uid, programId) {
+  await setDoc(doc(db, "users", uid), { assignedProgramId: programId }, { merge: true });
+}
+
+// ─── Workout Logs (for coach view) ──────────────────────────────
+export async function loadAllWorkoutLogs() {
+  const q = query(collection(db, "workoutLogs"), orderBy("date", "desc"), limit(200));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((d) => d.data());
+}
+
+export async function loadClientWorkoutLogs(userId) {
+  const q = query(collection(db, "workoutLogs"), where("userId", "==", userId), orderBy("date", "desc"), limit(50));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((d) => d.data());
+}
+
+// ─── Habits (for coach view) ────────────────────────────────────
+export async function loadClientHabits(userId) {
+  const q = query(collection(db, "habits"), where("userId", "==", userId), orderBy("date", "desc"), limit(30));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((d) => d.data());
 }
 
 export { db };

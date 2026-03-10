@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { saveProgram, loadPrograms, deleteProgram as fbDeleteProgram, saveLibrary, loadLibrary } from "./firebase";
+import { saveProgram, loadPrograms, deleteProgram as fbDeleteProgram, saveLibrary, loadLibrary, loadClients, assignProgramToClient, loadAllWorkoutLogs } from "./firebase";
 
 // ─── Data Helpers ────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -884,28 +884,80 @@ function ProgramsView({ programs, onEdit, onNew, onDelete, onDuplicate, onPrevie
   );
 }
 
-function ClientsView() {
-  const clients = [
-    { name: "Alex Rivera", email: "alex@email.com", program: "Power Builder", sessions: 24, streak: 6 },
-    { name: "Sam Chen", email: "sam@email.com", program: "Hypertrophy+", sessions: 18, streak: 4 },
-    { name: "Jordan Lee", email: "jordan@email.com", program: "Fat Furnace", sessions: 31, streak: 8 },
-  ];
+function ClientsView({ programs }) {
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [assigning, setAssigning] = useState(null); // clientId being assigned
+
+  useEffect(() => {
+    loadClients().then(c => { setClients(c); setLoading(false); }).catch(err => { console.error(err); setLoading(false); });
+  }, []);
+
+  const handleAssign = async (uid, programId) => {
+    try {
+      await assignProgramToClient(uid, programId);
+      setClients(prev => prev.map(c => c.uid === uid ? { ...c, assignedProgramId: programId } : c));
+      setAssigning(null);
+    } catch (err) { console.error("Assign error:", err); }
+  };
+
+  const getProgramName = (id) => {
+    const p = programs.find(pr => pr.id === id);
+    return p ? p.name : "None";
+  };
+
   return (
     <div>
-      <div className="page-header"><h2>Clients</h2><button className="btn btn-primary"><Icon name="plus" size={16} /> Add Client</button></div>
-      <div className="client-list">
-        {clients.map((c, i) => (
-          <div key={i} className="client-card">
-            <div className="client-avatar">{c.name.split(" ").map(n => n[0]).join("")}</div>
-            <div className="client-info"><h4>{c.name}</h4><p>{c.program} | {c.email}</p></div>
-            <div className="client-stats">
-              <div className="client-stat"><div className="value">{c.sessions}</div><div className="label">Sessions</div></div>
-              <div className="client-stat"><div className="value">{c.streak}</div><div className="label">Wk Streak</div></div>
+      <div className="page-header"><h2>Clients</h2></div>
+      {loading ? (
+        <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading clients...</div>
+      ) : clients.length === 0 ? (
+        <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
+          <Icon name="users" size={48} />
+          <h3 style={{ marginTop: 16, color: "var(--text-secondary)" }}>No Clients Yet</h3>
+          <p style={{ marginTop: 8, fontSize: 14 }}>When clients sign in to the Framewerks app with Google, they'll appear here automatically.</p>
+        </div>
+      ) : (
+        <div className="client-list">
+          {clients.map(c => (
+            <div key={c.uid} className="client-card" style={{ flexWrap: "wrap" }}>
+              <div className="client-avatar">
+                {c.photoUrl ? <img src={c.photoUrl} style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} /> : (c.name || "?")[0]}
+              </div>
+              <div className="client-info" style={{ flex: 1 }}>
+                <h4>{c.name || "Unknown"}</h4>
+                <p>{c.email}</p>
+                <p style={{ marginTop: 4, fontSize: 12 }}>
+                  Program: <strong style={{ color: c.assignedProgramId ? "var(--accent)" : "var(--text-muted)" }}>
+                    {c.assignedProgramId ? getProgramName(c.assignedProgramId) : "Not assigned"}
+                  </strong>
+                </p>
+              </div>
+              <div>
+                {assigning === c.uid ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {programs.map(p => (
+                      <button key={p.id} className="btn btn-ghost btn-sm"
+                        style={{ fontSize: 11, padding: "4px 10px", justifyContent: "flex-start" }}
+                        onClick={() => handleAssign(c.uid, p.id)}>
+                        {p.name}
+                      </button>
+                    ))}
+                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: "4px 10px", color: "var(--danger)" }}
+                      onClick={() => handleAssign(c.uid, null)}>Unassign</button>
+                    <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: "4px 10px" }}
+                      onClick={() => setAssigning(null)}>Cancel</button>
+                  </div>
+                ) : (
+                  <button className="btn btn-ghost btn-sm" onClick={() => setAssigning(c.uid)}>
+                    <Icon name="send" size={14} /> Assign
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-      <div className="info-note">Client data will sync in real-time once Firebase is connected.</div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1074,7 +1126,7 @@ export default function CoachDashboard() {
           {view === "editor" && editingProgram && <ProgramEditor program={editingProgram} onSave={handleSave} onBack={handleBack} library={library} onAddToLibrary={ex => { setLibrary(p => [...p, ex]); showToast("Added to library"); }} />}
           {view === "preview" && previewProgram && <ProgramPreview program={previewProgram} onBack={handleBack} />}
           {view === "library" && <LibraryView library={library} onAddToLibrary={ex => { setLibrary(p => [...p, ex]); showToast("Added to library"); }} onRemoveFromLibrary={id => setLibrary(p => p.filter(e => e.id !== id))} />}
-          {view === "clients" && <ClientsView />}
+          {view === "clients" && <ClientsView programs={programs} />}
           {view === "progress" && <ProgressView />}
         </div>
       </div>
