@@ -689,7 +689,7 @@ function ProgramEditor({ program, onSave, onBack, library, onAddToLibrary }) {
     setBulkTarget(null);
   };
 
-  const BulkAddPanel = ({ section, pi, di }) => {
+  const renderBulkPanel = (section, pi, di) => {
     const isOpen = bulkTarget && bulkTarget.phaseIdx === pi && bulkTarget.dayIdx === di && bulkTarget.section === section;
     if (!isOpen) return null;
     return (
@@ -713,8 +713,7 @@ function ProgramEditor({ program, onSave, onBack, library, onAddToLibrary }) {
             fontFamily: "'JetBrains Mono', monospace", outline: "none", resize: "vertical",
             lineHeight: 1.8, transition: "border-color 0.15s",
           }}
-          onFocus={e => e.target.style.borderColor = "var(--border-focus)"}
-          onBlur={e => e.target.style.borderColor = "var(--border)"}
+          autoFocus
         />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
           <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
@@ -806,7 +805,7 @@ function ProgramEditor({ program, onSave, onBack, library, onAddToLibrary }) {
                     ))}
                     <button className="btn btn-ghost btn-xs" onClick={() => addExToSection(pi, di, "warmup")} style={{ marginBottom: 4 }}><Icon name="plus" size={14} /> Add Warm-up</button>
                     <button className="btn btn-ghost btn-xs" onClick={() => { setBulkTarget({ phaseIdx: pi, dayIdx: di, section: "warmup" }); setBulkText(""); }} style={{ marginLeft: 6, marginBottom: 8 }}><Icon name="layers" size={14} /> Bulk Add</button>
-                    <BulkAddPanel section="warmup" pi={pi} di={di} />
+                    {renderBulkPanel("warmup", pi, di)}
 
                     <div className="section-header main"><Icon name="dumbbell" size={16} /> Main Work</div>
                     <GroupedExerciseList exercises={day.exercises || []}
@@ -817,7 +816,7 @@ function ProgramEditor({ program, onSave, onBack, library, onAddToLibrary }) {
                       <button className="btn btn-ghost btn-sm" onClick={() => addExToSection(pi, di, "exercises")}><Icon name="plus" size={16} /> Add Exercise</button>
                       <button className="btn btn-ghost btn-sm" onClick={() => { setBulkTarget({ phaseIdx: pi, dayIdx: di, section: "exercises" }); setBulkText(""); }}><Icon name="layers" size={16} /> Bulk Add</button>
                     </div>
-                    <BulkAddPanel section="exercises" pi={pi} di={di} />
+                    {renderBulkPanel("exercises", pi, di)}
 
                     <div className="section-header cooldown"><Icon name="moon" size={16} /> Cool-down</div>
                     {(day.cooldown || []).map((ex, ei) => (
@@ -828,7 +827,7 @@ function ProgramEditor({ program, onSave, onBack, library, onAddToLibrary }) {
                     ))}
                     <button className="btn btn-ghost btn-xs" onClick={() => addExToSection(pi, di, "cooldown")} style={{ marginBottom: 4 }}><Icon name="plus" size={14} /> Add Cool-down</button>
                     <button className="btn btn-ghost btn-xs" onClick={() => { setBulkTarget({ phaseIdx: pi, dayIdx: di, section: "cooldown" }); setBulkText(""); }} style={{ marginLeft: 6 }}><Icon name="layers" size={14} /> Bulk Add</button>
-                    <BulkAddPanel section="cooldown" pi={pi} di={di} />
+                    {renderBulkPanel("cooldown", pi, di)}
                   </div>
                 );
               })()}
