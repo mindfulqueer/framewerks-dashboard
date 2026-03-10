@@ -4,12 +4,20 @@ import { saveProgram, loadPrograms, deleteProgram as fbDeleteProgram, saveLibrar
 // ─── Data Helpers ────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2, 10);
 
+// Auto-format tempo: "3110" → "3-1-1-0"
+const formatTempo = (val) => {
+  if (!val) return val;
+  const stripped = val.replace(/[-\s]/g, "");
+  if (/^\d{4}$/.test(stripped)) return stripped.split("").join("-");
+  return val;
+};
+
 const TAGS = ["Strength", "Hypertrophy", "Fat Loss", "Mobility", "Conditioning", "Beginner", "Intermediate", "Advanced"];
 const TAG_COLORS = { Strength: "#ff6b6b", Hypertrophy: "#6c5ce7", "Fat Loss": "#ffa726", Mobility: "#00d4aa", Conditioning: "#4fc3f7", Beginner: "#81c784", Intermediate: "#ffb74d", Advanced: "#ef5350" };
 
 const EMPTY_SET = () => ({ id: uid(), reps: "", weight: "", tempo: "", rpe: "" });
 const EMPTY_EXERCISE = () => ({
-  id: uid(), name: "", videoUrl: "", coachNotes: "", restSeconds: 90,
+  id: uid(), name: "", videoUrl: "", coachNotes: "", restSeconds: 60,
   sets: [EMPTY_SET(), EMPTY_SET(), EMPTY_SET()],
   groupType: "none", groupId: null,
 });
@@ -446,8 +454,9 @@ function SetTable({ sets, onChange, onAdd, onRemove }) {
         <div key={set.id} className="set-row">
           <div className="set-number">{i + 1}</div>
           {["reps", "weight", "tempo", "rpe"].map(f => (
-            <input key={f} value={set[f]} placeholder={f === "tempo" ? "3-1-1-0" : f === "rpe" ? "7" : ""}
-              onChange={e => onChange(set.id, f, e.target.value)} />
+            <input key={f} value={set[f]} placeholder={f === "tempo" ? "3110" : f === "rpe" ? "7" : ""}
+              onChange={e => onChange(set.id, f, e.target.value)}
+              onBlur={f === "tempo" ? (e => onChange(set.id, f, formatTempo(e.target.value))) : undefined} />
           ))}
           <button className="btn-icon danger" onClick={() => onRemove(set.id)}><Icon name="trash" size={14} /></button>
         </div>
@@ -579,7 +588,78 @@ function ProgramEditor({ program, onSave, onBack, library, onAddToLibrary }) {
     const cleaned = JSON.parse(JSON.stringify(prog));
     cleaned.phases.forEach(ph => { ph.days.forEach(d => { d.exercises = assignGroups(d.exercises); }); });
     cleaned.updatedAt = new Date().toISOString();
-    onSave(cleaned); setProg(cleaned); showToast("Program saved");
+    // Auto-add new exercises to library
+    const libNames = new Set(library.map(l => l.name.toLowerCase()));
+    const newExercises = [];
+    cleaned.phases.forEach(ph => {
+      ph.days.forEach(d => {
+        [...(d.warmup || []), ...(d.exercises || []), ...(d.cooldown || [])].forEach(ex => {
+          if (ex.name && !libNames.has(ex.name.toLowerCase())) {
+            libNames.add(ex.name.toLowerCase());
+            newExercises.push({ id: uid(), name: ex.name, category: "Uncategorized", videoUrl: ex.videoUrl || "", coachNotes: ex.coachNotes || "" });
+          }
+        });
+      });
+    });
+    if (newExercises.length > 0) {
+      newExercises.forEach(ex => onAddToLibrary(ex));
+      showToast(`Program saved + ${newExercises.length} new exercise${newExercises.length > 1 ? "s" : ""} added to library`);
+    } else {
+      showToast("Program saved");
+    }
+    onSave(cleaned); setProg(cleaned);
+  };
+
+  // Generate remaining weeks from Week 1 with progression
+  const generateWeeks = (phaseIdx) => {
+    updateProg(p => {
+      const phase = p.phases[phaseIdx];
+      const totalWeeks = parseInt(phase.weeks) || 4;
+      if (totalWeeks <= 1) return;
+      const prog = phase.progression || { type: "none", amount: 0, unit: "lbs", frequency: "weekly" };
+      const baseDays = phase.days.map(d => JSON.parse(JSON.stringify(d)));
+
+      // Clear existing week labels and regenerate
+      const allDays = [];
+      for (let week = 0; week < totalWeeks; week++) {
+        baseDays.forEach((baseDay, di) => {
+          const day = JSON.parse(JSON.stringify(baseDay));
+          day.id = week === 0 ? baseDay.id : uid();
+          day.label = `Wk${week + 1} - ${baseDay.label.replace(/^Wk\d+\s*[-–]\s*/, "")}`;
+
+          // Apply progression to weights if not week 0
+          if (week > 0 && prog.type !== "none") {
+            const applyProgression = (exercises) => {
+              (exercises || []).forEach(ex => {
+                ex.id = uid();
+                ex.sets.forEach(s => {
+                  s.id = uid();
+                  if (s.weight && !isNaN(parseFloat(s.weight))) {
+                    const baseWeight = parseFloat(s.weight);
+                    let newWeight;
+                    if (prog.type === "linear") {
+                      newWeight = baseWeight + (parseFloat(prog.amount) || 0) * week;
+                    } else if (prog.type === "percentage") {
+                      newWeight = baseWeight * Math.pow(1 + (parseFloat(prog.amount) || 0) / 100, week);
+                      newWeight = Math.round(newWeight * 10) / 10;
+                    } else {
+                      newWeight = baseWeight; // RPE-based: keep same weight
+                    }
+                    s.weight = String(newWeight);
+                  }
+                });
+              });
+            };
+            applyProgression(day.warmup);
+            applyProgression(day.exercises);
+            applyProgression(day.cooldown);
+          }
+          allDays.push(day);
+        });
+      }
+      phase.days = allDays;
+    });
+    showToast("Weeks generated with progression");
   };
 
   const handleLibSelect = (libEx) => {
@@ -692,6 +772,16 @@ function ProgramEditor({ program, onSave, onBack, library, onAddToLibrary }) {
                     <option value="weekly">per week</option><option value="session">per session</option>
                   </select>
                 </>)}
+              </div>
+              {/* Generate Weeks Button */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => generateWeeks(pi)}
+                  style={{ background: "rgba(108,92,231,0.1)", borderColor: "var(--accent)", color: "var(--accent)" }}>
+                  <Icon name="layers" size={14} /> Generate {phase.weeks} Weeks from Day Templates
+                </button>
+                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                  Build your days first, then generate all weeks with progression applied
+                </span>
               </div>
               <div className="day-tabs">
                 {phase.days.map((day, di) => (
