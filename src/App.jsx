@@ -1052,15 +1052,75 @@ function ClientsView({ programs }) {
 }
 
 function ProgressView() {
+  const [logs, setLogs] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedClient, setSelectedClient] = useState(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [allLogs, allClients] = await Promise.all([loadAllWorkoutLogs(), loadClients()]);
+        setLogs(allLogs);
+        setClients(allClients);
+      } catch (err) { console.error("Progress load error:", err); }
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  const filteredLogs = selectedClient ? logs.filter(l => l.userId === selectedClient) : logs;
+  const totalSessions = filteredLogs.length;
+  const totalSets = filteredLogs.reduce((a, l) => a + (l.completedSets || 0), 0);
+  const avgFeeling = totalSessions > 0 ? (filteredLogs.reduce((a, l) => a + (l.feeling || 0), 0) / totalSessions).toFixed(1) : "—";
+
+  const getClientName = (uid) => { const c = clients.find(cl => cl.uid === uid); return c?.name || c?.email || uid; };
+
   return (
     <div>
       <div className="page-header"><h2>Progress</h2></div>
-      <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
-        <Icon name="chart" size={48} />
-        <h3 style={{ marginTop: 16, color: "var(--text-secondary)" }}>Client Progress Dashboard</h3>
-        <p style={{ marginTop: 8, fontSize: 14 }}>Workout logs, completion rates, and strength charts will appear here once clients start training.</p>
-        <div className="info-note" style={{ marginTop: 16, textAlign: "left" }}>Connects to Firebase for real-time data.</div>
-      </div>
+      {loading ? (
+        <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading client data...</div>
+      ) : logs.length === 0 ? (
+        <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
+          <Icon name="chart" size={48} />
+          <h3 style={{ marginTop: 16, color: "var(--text-secondary)" }}>No Workout Data Yet</h3>
+          <p style={{ marginTop: 8, fontSize: 14 }}>When clients complete workouts, their logs will appear here.</p>
+        </div>
+      ) : (<>
+        {/* Client filter */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
+          <button className={`btn btn-sm ${!selectedClient ? "btn-primary" : "btn-ghost"}`} onClick={() => setSelectedClient(null)}>All Clients</button>
+          {clients.filter(c => logs.some(l => l.userId === c.uid)).map(c => (
+            <button key={c.uid} className={`btn btn-sm ${selectedClient === c.uid ? "btn-primary" : "btn-ghost"}`} onClick={() => setSelectedClient(c.uid)}>{c.name || c.email}</button>
+          ))}
+        </div>
+
+        {/* Stats */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 24 }}>
+          {[["Sessions", totalSessions], ["Sets Logged", totalSets], ["Avg Feeling", avgFeeling + "/5"]].map(([label, val]) => (
+            <div key={label} style={{ background: "var(--bg-secondary)", borderRadius: 12, border: "1px solid var(--border)", padding: 16, textAlign: "center" }}>
+              <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: "var(--accent)" }}>{val}</div>
+              <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 1, marginTop: 4 }}>{label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Recent logs */}
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, fontWeight: 500, textTransform: "uppercase", letterSpacing: 1 }}>Recent Sessions</div>
+        {filteredLogs.slice(0, 20).map(log => (
+          <div key={log.id} style={{ background: "var(--bg-secondary)", borderRadius: 10, border: "1px solid var(--border)", padding: "14px 16px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>{log.dayLabel}</div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{getClientName(log.userId)} · {log.date} · {log.programName}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: "var(--accent)" }}>{log.completedSets}/{log.totalSets}</div>
+              <div style={{ fontSize: 10, color: "var(--text-muted)" }}>sets</div>
+            </div>
+          </div>
+        ))}
+      </>)}
     </div>
   );
 }
