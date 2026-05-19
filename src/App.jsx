@@ -10,12 +10,12 @@ import {
 
 // ─── Firebase ────────────────────────────────────────────────────────────────
 const firebaseConfig = {
-  apiKey: "AIzaSyDumer7KJOVMOf85aoEP1cam4kpLKs5kiQ",
-  authDomain: "framewerks-dashboard.firebaseapp.com",
-  projectId: "framewerks-dashboard",
-  storageBucket: "framewerks-dashboard.firebasestorage.app",
-  messagingSenderId: "878987259944",
-  appId: "1:878987259944:web:38bc7c9e3e5e28d2877c9b"
+  apiKey: "AIzaSyDwCIb6OQ40TDNlNr1TjxO4kZVf2Ho62X8",
+  authDomain: "framewerks-coach.firebaseapp.com",
+  projectId: "framewerks-coach",
+  storageBucket: "framewerks-coach.firebasestorage.app",
+  messagingSenderId: "850336233136",
+  appId: "1:850336233136:web:2bf59afb82672435c4ed75"
 };
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
