@@ -2,12 +2,12 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc, query, where, orderBy, limit } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyC6mtaBP6B4Jf7515VO9s1Z9dstYPY_5ew",
-  authDomain: "framewerks-dashboard.firebaseapp.com",
-  projectId: "framewerks-dashboard",
-  storageBucket: "framewerks-dashboard.firebasestorage.app",
-  messagingSenderId: "838679216503",
-  appId: "1:838679216503:web:04eaca225681ee43e1e172",
+  apiKey: "AIzaSyDwCIb6OQ40TDNlNr1TjxO4kZVf2Ho62X8",
+  authDomain: "framewerks-coach.firebaseapp.com",
+  projectId: "framewerks-coach",
+  storageBucket: "framewerks-coach.firebasestorage.app",
+  messagingSenderId: "850336233136",
+  appId: "1:850336233136:web:2bf59afb82672435c4ed75",
 };
 
 const app = initializeApp(firebaseConfig);
@@ -50,22 +50,38 @@ export async function assignProgramToClient(uid, programId) {
 
 // ─── Workout Logs (for coach view) ──────────────────────────────
 export async function loadAllWorkoutLogs() {
-  const q = query(collection(db, "workoutLogs"), orderBy("date", "desc"), limit(200));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map((d) => d.data());
+  try {
+    const q = query(collection(db, "workoutLogs"), orderBy("date", "desc"), limit(200));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((d) => d.data());
+  } catch (err) {
+    console.warn("Indexed query failed, fallback:", err.message);
+    try {
+      const snapshot = await getDocs(collection(db, "workoutLogs"));
+      const results = snapshot.docs.map((d) => d.data());
+      return results.sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 200);
+    } catch { return []; }
+  }
 }
 
 export async function loadClientWorkoutLogs(userId) {
-  const q = query(collection(db, "workoutLogs"), where("userId", "==", userId), orderBy("date", "desc"), limit(50));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map((d) => d.data());
+  try {
+    const q = query(collection(db, "workoutLogs"), where("userId", "==", userId), orderBy("date", "desc"), limit(50));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((d) => d.data());
+  } catch (err) {
+    console.warn("Indexed query failed, fallback:", err.message);
+    try {
+      const q = query(collection(db, "workoutLogs"), where("userId", "==", userId), limit(50));
+      const snapshot = await getDocs(q);
+      const results = snapshot.docs.map((d) => d.data());
+      return results.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    } catch { return []; }
+  }
 }
 
-// ─── Habits (for coach view) ────────────────────────────────────
-export async function loadClientHabits(userId) {
-  const q = query(collection(db, "habits"), where("userId", "==", userId), orderBy("date", "desc"), limit(30));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map((d) => d.data());
-}
+// ─── Client Data (for coach view) ───────────────────────────────
+// Coach can see habit completions and wellbeing from the user profile directly
+// since client data now saves to the user profile via merge
 
 export { db };

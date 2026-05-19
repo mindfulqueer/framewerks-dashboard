@@ -1,8 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
-import { getFirestore, collection, addDoc, query, where, getDocs, updateDoc, doc, deleteDoc, orderBy, Timestamp } from 'firebase/firestore';
+import { useState, useEffect, useRef } from "react";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+  getFirestore, collection, query, where, orderBy, getDocs,
+  onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, setDoc
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import {
+  getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
+// ─── Firebase ────────────────────────────────────────────────────────────────
 const firebaseConfig = {
   apiKey: "AIzaSyDumer7KJOVMOf85aoEP1cam4kpLKs5kiQ",
   authDomain: "framewerks-dashboard.firebaseapp.com",
@@ -11,1224 +17,811 @@ const firebaseConfig = {
   messagingSenderId: "878987259944",
   appId: "1:878987259944:web:38bc7c9e3e5e28d2877c9b"
 };
-
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
 const db = getFirestore(app);
+const auth = getAuth(app);
+const provider = new GoogleAuthProvider();
 
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('programs');
+// ─── Design Tokens ────────────────────────────────────────────────────────────
+const C = {
+  bg: "#0A0A0A",
+  surface: "#111111",
+  card: "#161616",
+  cardHover: "#1C1C1C",
+  border: "#252525",
+  borderLight: "#2E2E2E",
+  accent: "#E8FF00",
+  accentRed: "#FF3D3D",
+  accentBlue: "#00C8FF",
+  accentGreen: "#00FF88",
+  text: "#FFFFFF",
+  textMuted: "#777777",
+  textDim: "#444444",
+};
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
+const F = {
+  display: "'Bebas Neue', 'Impact', sans-serif",
+  body: "system-ui, -apple-system, sans-serif",
+};
 
-  const handleSignIn = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error('Sign-in error:', error);
-    }
+// ─── Shared Styles ────────────────────────────────────────────────────────────
+const S = {
+  card: {
+    background: C.card,
+    border: `1px solid ${C.border}`,
+    borderRadius: 10,
+    padding: "16px 20px",
+    marginBottom: 10,
+  },
+  pill: (color = C.accent) => ({
+    display: "inline-flex", alignItems: "center",
+    padding: "3px 10px", borderRadius: 20,
+    fontSize: 10, fontFamily: F.body, fontWeight: 700,
+    letterSpacing: "0.12em", textTransform: "uppercase",
+    background: color + "20", color, border: `1px solid ${color}33`,
+  }),
+  btn: (v = "primary") => ({
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    gap: 8, padding: "10px 20px", borderRadius: 8, border: "none",
+    cursor: "pointer", fontFamily: F.display, letterSpacing: "0.08em",
+    fontSize: 15, transition: "all 0.15s",
+    ...(v === "primary" ? { background: C.accent, color: "#000" }
+      : v === "danger" ? { background: C.accentRed, color: "#fff" }
+      : v === "ghost" ? { background: "transparent", color: C.text, border: `1px solid ${C.border}` }
+      : v === "dim" ? { background: "transparent", color: C.textMuted, border: `1px solid ${C.border}` }
+      : {}),
+  }),
+  input: {
+    width: "100%", background: C.surface, border: `1px solid ${C.border}`,
+    borderRadius: 8, padding: "10px 14px", color: C.text,
+    fontSize: 14, fontFamily: F.body, outline: "none", boxSizing: "border-box",
+  },
+  label: {
+    fontSize: 10, fontFamily: F.body, color: C.textMuted,
+    fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase",
+    marginBottom: 6, display: "block",
+  },
+  sectionTitle: { fontSize: 32, fontFamily: F.display, letterSpacing: "0.05em", lineHeight: 1 },
+  sectionSub: { fontSize: 11, fontFamily: F.body, color: C.textMuted, letterSpacing: "0.08em", marginTop: 4 },
+};
+
+// ─── Login ────────────────────────────────────────────────────────────────────
+function LoginScreen() {
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const login = async () => {
+    setLoading(true); setErr("");
+    try { await signInWithPopup(auth, provider); }
+    catch { setErr("Sign in failed. Try again."); setLoading(false); }
   };
-
-  const handleSignOut = async () => {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.error('Sign-out error:', error);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div>Loading...</div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px' }}>
-        <h1 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '48px', color: '#FF4D1C' }}>FRAMEWERKS COACH</h1>
-        <button onClick={handleSignIn} style={{ padding: '12px 24px', fontSize: '16px', cursor: 'pointer' }}>
-          Sign In with Google
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div style={{ minHeight: '100vh', background: '#f5f5f5' }}>
-      <nav style={{ background: '#1a1a1a', color: 'white', padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '32px', color: '#FF4D1C', margin: 0 }}>FRAMEWERKS COACH</h1>
-        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-          <button
-            onClick={() => setActiveTab('programs')}
-            style={{
-              background: activeTab === 'programs' ? '#FF4D1C' : 'transparent',
-              color: 'white',
-              border: activeTab === 'programs' ? 'none' : '1px solid #444',
-              padding: '10px 20px',
-              cursor: 'pointer',
-              fontFamily: '"Bebas Neue", sans-serif',
-              fontSize: '14px'
-            }}
-          >
-            PROGRAMS
-          </button>
-          <button
-            onClick={() => setActiveTab('exercises')}
-            style={{
-              background: activeTab === 'exercises' ? '#FF4D1C' : 'transparent',
-              color: 'white',
-              border: activeTab === 'exercises' ? 'none' : '1px solid #444',
-              padding: '10px 20px',
-              cursor: 'pointer',
-              fontFamily: '"Bebas Neue", sans-serif',
-              fontSize: '14px'
-            }}
-          >
-            EXERCISES
-          </button>
-          <button
-            onClick={() => setActiveTab('clients')}
-            style={{
-              background: activeTab === 'clients' ? '#FF4D1C' : 'transparent',
-              color: 'white',
-              border: activeTab === 'clients' ? 'none' : '1px solid #444',
-              padding: '10px 20px',
-              cursor: 'pointer',
-              fontFamily: '"Bebas Neue", sans-serif',
-              fontSize: '14px'
-            }}
-          >
-            CLIENTS
-          </button>
-          <button
-            onClick={() => setActiveTab('progress')}
-            style={{
-              background: activeTab === 'progress' ? '#FF4D1C' : 'transparent',
-              color: 'white',
-              border: activeTab === 'progress' ? 'none' : '1px solid #444',
-              padding: '10px 20px',
-              cursor: 'pointer',
-              fontFamily: '"Bebas Neue", sans-serif',
-              fontSize: '14px'
-            }}
-          >
-            PROGRESS
-          </button>
-          <button onClick={handleSignOut} style={{ background: 'transparent', color: '#888', border: '1px solid #444', padding: '10px 20px', cursor: 'pointer' }}>
-            Sign Out
-          </button>
+    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", fontFamily: F.display }}>
+      {/* Left panel */}
+      <div style={{
+        width: 420, background: C.surface, borderRight: `1px solid ${C.border}`,
+        display: "flex", flexDirection: "column", justifyContent: "center", padding: "60px 48px"
+      }}>
+        <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, letterSpacing: "0.3em", marginBottom: 12 }}>
+          FRAMEWERKS
         </div>
-      </nav>
-
-      <div style={{ padding: '40px' }}>
-        {activeTab === 'programs' && <ProgramBuilder user={user} />}
-        {activeTab === 'exercises' && <ExerciseLibrary user={user} />}
-        {activeTab === 'clients' && <ClientsManager user={user} />}
-        {activeTab === 'progress' && <ProgressTracker user={user} />}
+        <div style={{ fontSize: 72, color: C.accent, lineHeight: 0.9, marginBottom: 8 }}>
+          COACH<br /><span style={{ color: C.text }}>DASH</span><span style={{ color: C.accentRed }}>.</span>
+        </div>
+        <div style={{ fontSize: 13, fontFamily: F.body, color: C.textMuted, marginTop: 16, lineHeight: 1.7, maxWidth: 280 }}>
+          Real-time client progress. Live workout feeds. Complete training history. All in one place.
+        </div>
+        <div style={{ marginTop: 40 }}>
+          {err && (
+            <div style={{ background: C.accentRed + "22", border: `1px solid ${C.accentRed}44`, borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 12, fontFamily: F.body, color: C.accentRed }}>
+              {err}
+            </div>
+          )}
+          <button onClick={login} disabled={loading} style={{ ...S.btn("primary"), width: "100%", fontSize: 20, padding: "16px 24px", opacity: loading ? 0.6 : 1 }}>
+            {loading ? "SIGNING IN..." : "SIGN IN WITH GOOGLE"}
+          </button>
+          <p style={{ fontSize: 11, fontFamily: F.body, color: C.textDim, marginTop: 12, textAlign: "center" }}>
+            Coach accounts only — contact Framewerks for access
+          </p>
+        </div>
+      </div>
+      {/* Right decorative panel */}
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", inset: 0, display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gridTemplateRows: "repeat(6, 1fr)", gap: 1 }}>
+          {Array(48).fill(0).map((_, i) => (
+            <div key={i} style={{ background: i % 7 === 0 ? C.accent + "08" : i % 5 === 0 ? C.accentRed + "05" : C.surface, borderRadius: 4 }} />
+          ))}
+        </div>
+        <div style={{ textAlign: "center", zIndex: 1 }}>
+          <div style={{ fontSize: 140, lineHeight: 1, color: C.accent + "10", fontFamily: F.display }}>FW</div>
+        </div>
       </div>
     </div>
   );
 }
 
-// ============= PROGRAM BUILDER =============
-function ProgramBuilder({ user }) {
-  const [programs, setPrograms] = useState([]);
-  const [editingProgram, setEditingProgram] = useState(null);
-  const [showPreview, setShowPreview] = useState(null);
+// ─── Stat Card ────────────────────────────────────────────────────────────────
+function StatCard({ label, value, color = C.text, sub }) {
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 20px" }}>
+      <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase" }}>{label}</div>
+      <div style={{ fontSize: 42, fontFamily: F.display, color, lineHeight: 1, marginTop: 6 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 4 }}>{sub}</div>}
+    </div>
+  );
+}
 
-  useEffect(() => {
-    loadPrograms();
-  }, []);
+// ─── Overview Tab ─────────────────────────────────────────────────────────────
+function OverviewTab({ clients, workoutLogs, liveFeed, onSelectClient }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const todayLogs = workoutLogs.filter(l => {
+    const d = l.completedAt?.toDate ? l.completedAt.toDate() : new Date(l.completedAt || 0);
+    return d.toISOString().slice(0, 10) === today;
+  });
 
-  const loadPrograms = async () => {
-    const q = query(collection(db, 'programs'), where('coachId', '==', user.uid));
-    const snapshot = await getDocs(q);
-    setPrograms(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-  };
-
-  const createNewProgram = () => {
-    setEditingProgram({
-      name: '',
-      description: '',
-      tags: [],
-      phases: [{
-        name: 'Phase 1',
-        days: [{
-          id: Date.now().toString(),
-          name: 'Day 1',
-          warmup: [],
-          main: [],
-          cooldown: []
-        }]
-      }]
-    });
-  };
-
-  const saveProgram = async () => {
-    if (!editingProgram.name) {
-      alert('Please enter a program name');
-      return;
-    }
-
-    try {
-      if (editingProgram.id) {
-        await updateDoc(doc(db, 'programs', editingProgram.id), {
-          ...editingProgram,
-          updatedAt: Timestamp.now()
-        });
-      } else {
-        await addDoc(collection(db, 'programs'), {
-          ...editingProgram,
-          coachId: user.uid,
-          createdAt: Timestamp.now()
-        });
-      }
-      setEditingProgram(null);
-      loadPrograms();
-    } catch (error) {
-      console.error('Error saving program:', error);
-      alert('Error saving program');
-    }
-  };
-
-  const deleteProgram = async (programId) => {
-    if (!confirm('Are you sure you want to delete this program?')) return;
-    try {
-      await deleteDoc(doc(db, 'programs', programId));
-      loadPrograms();
-    } catch (error) {
-      console.error('Error deleting program:', error);
-    }
-  };
-
-  const duplicateProgram = async (program) => {
-    const duplicate = {
-      ...program,
-      name: `${program.name} (Copy)`,
-      id: undefined,
-      createdAt: undefined,
-      updatedAt: undefined
-    };
-    setEditingProgram(duplicate);
-  };
-
-  const exportToPDF = async (program) => {
-    alert('PDF export feature coming soon!');
-  };
-
-  if (editingProgram) {
-    return <ProgramEditor program={editingProgram} setProgram={setEditingProgram} onSave={saveProgram} onCancel={() => setEditingProgram(null)} />;
-  }
-
-  if (showPreview) {
-    return <ProgramPreview program={showPreview} onClose={() => setShowPreview(null)} />;
-  }
+  const weekLogs = workoutLogs.filter(l => {
+    const d = l.completedAt?.toDate ? l.completedAt.toDate() : new Date(l.completedAt || 0);
+    return (Date.now() - d.getTime()) < 7 * 24 * 60 * 60 * 1000;
+  });
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-        <h2 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '36px', margin: 0 }}>PROGRAMS</h2>
-        <button onClick={createNewProgram} style={{ background: '#FF4D1C', color: 'white', border: 'none', padding: '12px 24px', fontSize: '16px', cursor: 'pointer', fontFamily: '"Bebas Neue", sans-serif' }}>
-          + NEW PROGRAM
-        </button>
+      <div style={{ marginBottom: 28 }}>
+        <div style={S.sectionTitle}>OVERVIEW</div>
+        <div style={S.sectionSub}>
+          {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).toUpperCase()}
+        </div>
       </div>
 
-      {programs.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: '#888' }}>
-          No programs yet. Create your first program!
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
-          {programs.map(program => (
-            <div key={program.id} style={{ background: 'white', padding: '24px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-              <h3 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '24px', marginBottom: '8px' }}>{program.name}</h3>
-              {program.description && <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>{program.description}</p>}
-              {program.tags && program.tags.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
-                  {program.tags.map((tag, i) => (
-                    <span key={i} style={{ background: '#f0f0f0', padding: '4px 12px', borderRadius: '12px', fontSize: '12px', color: '#666' }}>
-                      {tag}
-                    </span>
-                  ))}
+      {/* Stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 28 }}>
+        <StatCard label="Total Clients" value={clients.length} color={C.accent} />
+        <StatCard label="Today" value={todayLogs.length} color={C.accentBlue} sub="workouts completed" />
+        <StatCard label="This Week" value={weekLogs.length} color={C.accentGreen} sub="total workouts" />
+        <StatCard label="Live Now" value={liveFeed.length} color={liveFeed.length > 0 ? C.accentRed : C.textDim} sub="active sets" />
+      </div>
+
+      {/* Live Feed */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div>
+          <div style={{ fontSize: 18, fontFamily: F.display, letterSpacing: "0.05em", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: liveFeed.length > 0 ? C.accentRed : C.textDim, animation: liveFeed.length > 0 ? "pulse 1.5s infinite" : "none" }} />
+            LIVE ACTIVITY
+          </div>
+          {liveFeed.length === 0 ? (
+            <div style={{ ...S.card, textAlign: "center", padding: "32px 20px" }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>😴</div>
+              <div style={{ fontSize: 16, fontFamily: F.display, color: C.textMuted }}>NO ACTIVE SESSIONS</div>
+            </div>
+          ) : (
+            liveFeed.slice(0, 8).map((item, i) => (
+              <div key={item.id || i} style={{ ...S.card, borderLeft: `3px solid ${C.accentRed}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontFamily: F.display, letterSpacing: "0.05em" }}>{item.exerciseName}</div>
+                    <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>
+                      Set {item.setNumber} · {item.reps || "–"} reps · {item.weight ? `${item.weight} lbs` : "bodyweight"}
+                    </div>
+                    <div style={{ fontSize: 10, fontFamily: F.body, color: C.textDim, marginTop: 2 }}>{item.userId?.slice(0, 12)}...</div>
+                  </div>
+                  <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted }}>
+                    {item.timestamp?.toDate ? item.timestamp.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Just now"}
+                  </div>
                 </div>
-              )}
-              <div style={{ fontSize: '12px', color: '#888', marginBottom: '16px' }}>
-                {program.phases?.length || 0} phases • {program.phases?.reduce((total, phase) => total + (phase.days?.length || 0), 0) || 0} days
               </div>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button onClick={() => setShowPreview(program)} style={{ flex: 1, background: '#FF4D1C', color: 'white', border: 'none', padding: '8px', cursor: 'pointer', fontSize: '12px', fontFamily: '"Bebas Neue", sans-serif' }}>
-                  PREVIEW
-                </button>
-                <button onClick={() => setEditingProgram(program)} style={{ flex: 1, background: '#333', color: 'white', border: 'none', padding: '8px', cursor: 'pointer', fontSize: '12px', fontFamily: '"Bebas Neue", sans-serif' }}>
-                  EDIT
-                </button>
-                <button onClick={() => duplicateProgram(program)} style={{ background: '#666', color: 'white', border: 'none', padding: '8px 12px', cursor: 'pointer', fontSize: '12px', fontFamily: '"Bebas Neue", sans-serif' }}>
-                  COPY
-                </button>
-                <button onClick={() => exportToPDF(program)} style={{ background: '#666', color: 'white', border: 'none', padding: '8px 12px', cursor: 'pointer', fontSize: '12px', fontFamily: '"Bebas Neue", sans-serif' }}>
-                  PDF
-                </button>
-                <button onClick={() => deleteProgram(program.id)} style={{ background: '#d32f2f', color: 'white', border: 'none', padding: '8px 12px', cursor: 'pointer', fontSize: '12px', fontFamily: '"Bebas Neue", sans-serif' }}>
-                  DELETE
-                </button>
+            ))
+          )}
+        </div>
+
+        {/* Recent Workouts */}
+        <div>
+          <div style={{ fontSize: 18, fontFamily: F.display, letterSpacing: "0.05em", marginBottom: 12 }}>RECENT WORKOUTS</div>
+          {workoutLogs.slice(0, 8).map((log, i) => (
+            <div key={log.id || i} style={{ ...S.card, cursor: "pointer" }} onClick={() => onSelectClient(log.userId)}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 14, fontFamily: F.display, letterSpacing: "0.03em" }}>{log.workoutName}</div>
+                  <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>
+                    {log.userId?.slice(0, 16)}...
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted }}>
+                    {log.completedAt?.toDate
+                      ? log.completedAt.toDate().toLocaleDateString()
+                      : log.completedAt ? new Date(log.completedAt).toLocaleDateString() : "–"}
+                  </div>
+                  {log.rating && <div style={{ fontSize: 14, fontFamily: F.display, color: C.accent }}>{log.rating}★</div>}
+                </div>
               </div>
             </div>
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Clients Tab ──────────────────────────────────────────────────────────────
+function ClientsTab({ clients, workoutLogs, selectedClientId, onSelectClient, onAddClient }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [newClient, setNewClient] = useState({ name: "", email: "", program: "Rebuild Method" });
+  const [saving, setSaving] = useState(false);
+
+  const handleAdd = async () => {
+    if (!newClient.name || !newClient.email) return;
+    setSaving(true);
+    try {
+      await addDoc(collection(db, "clients"), {
+        ...newClient,
+        createdAt: serverTimestamp(),
+        active: true,
+      });
+      setNewClient({ name: "", email: "", program: "Rebuild Method" });
+      setShowAdd(false);
+      onAddClient();
+    } catch (e) { console.error(e); }
+    setSaving(false);
+  };
+
+  const getClientLogs = (clientId) =>
+    workoutLogs.filter(l => l.userId === clientId);
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
+        <div>
+          <div style={S.sectionTitle}>CLIENTS</div>
+          <div style={S.sectionSub}>{clients.length} ATHLETES ENROLLED</div>
+        </div>
+        <button onClick={() => setShowAdd(!showAdd)} style={{ ...S.btn("primary"), fontSize: 14 }}>
+          + ADD CLIENT
+        </button>
+      </div>
+
+      {/* Add client form */}
+      {showAdd && (
+        <div style={{ ...S.card, border: `1px solid ${C.accent}44`, marginBottom: 20 }}>
+          <div style={{ fontSize: 18, fontFamily: F.display, marginBottom: 16 }}>NEW CLIENT</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style={S.label}>NAME</label>
+              <input value={newClient.name} onChange={e => setNewClient({ ...newClient, name: e.target.value })} placeholder="John Doe" style={S.input} />
+            </div>
+            <div>
+              <label style={S.label}>EMAIL</label>
+              <input value={newClient.email} onChange={e => setNewClient({ ...newClient, email: e.target.value })} placeholder="john@email.com" style={S.input} />
+            </div>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={S.label}>PROGRAM</label>
+            <select value={newClient.program} onChange={e => setNewClient({ ...newClient, program: e.target.value })} style={{ ...S.input, fontFamily: F.body }}>
+              <option>Rebuild Method</option>
+              <option>Strength Foundation</option>
+              <option>Custom Program</option>
+            </select>
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => setShowAdd(false)} style={{ ...S.btn("ghost"), flex: 1 }}>CANCEL</button>
+            <button onClick={handleAdd} disabled={saving} style={{ ...S.btn("primary"), flex: 2, opacity: saving ? 0.6 : 1 }}>
+              {saving ? "SAVING..." : "ADD CLIENT"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Client list */}
+      {clients.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "60px 0", color: C.textMuted }}>
+          <div style={{ fontSize: 48, fontFamily: F.display, marginBottom: 8 }}>0</div>
+          <div style={{ fontFamily: F.body, fontSize: 13 }}>No clients yet. Add your first athlete.</div>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+          {clients.map(client => {
+            const logs = getClientLogs(client.id);
+            const lastLog = logs[0];
+            const isSelected = selectedClientId === client.id;
+            return (
+              <div key={client.id}
+                onClick={() => onSelectClient(client.id)}
+                style={{
+                  background: isSelected ? C.accent + "0A" : C.card,
+                  border: `1px solid ${isSelected ? C.accent : C.border}`,
+                  borderRadius: 10, padding: "20px",
+                  cursor: "pointer", transition: "all 0.15s",
+                }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: "50%",
+                  background: isSelected ? C.accent : C.surface,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 18, fontFamily: F.display, color: isSelected ? "#000" : C.textMuted,
+                  marginBottom: 12,
+                }}>
+                  {(client.name || client.email || "?")[0].toUpperCase()}
+                </div>
+                <div style={{ fontSize: 18, fontFamily: F.display, letterSpacing: "0.03em" }}>
+                  {client.name || client.email?.split("@")[0]}
+                </div>
+                <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>{client.email}</div>
+                <div style={{ marginTop: 12, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <span style={S.pill(C.accentBlue)}>{logs.length} sessions</span>
+                  {client.program && <span style={S.pill(C.textMuted)}>{client.program}</span>}
+                </div>
+                {lastLog && (
+                  <div style={{ fontSize: 10, fontFamily: F.body, color: C.textDim, marginTop: 8 }}>
+                    Last: {lastLog.completedAt?.toDate
+                      ? lastLog.completedAt.toDate().toLocaleDateString()
+                      : lastLog.completedAt ? new Date(lastLog.completedAt).toLocaleDateString() : "–"}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-// ============= PROGRAM EDITOR =============
-function ProgramEditor({ program, setProgram, onSave, onCancel }) {
-  const [exercises, setExercises] = useState([]);
-  const [showBulkAdd, setShowBulkAdd] = useState(null);
+// ─── Progress Tab (per client) ────────────────────────────────────────────────
+function ProgressTab({ clients, workoutLogs, selectedClientId, onSelectClient }) {
+  const [selectedExercise, setSelectedExercise] = useState("");
+  const [detailedLog, setDetailedLog] = useState(null);
 
-  useEffect(() => {
-    loadExercises();
-  }, []);
+  const clientLogs = selectedClientId
+    ? workoutLogs.filter(l => l.userId === selectedClientId)
+    : workoutLogs;
 
-  const loadExercises = async () => {
-    const snapshot = await getDocs(collection(db, 'exercises'));
-    setExercises(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-  };
+  const selectedClient = clients.find(c => c.id === selectedClientId);
 
-  const addPhase = () => {
-    setProgram({
-      ...program,
-      phases: [...program.phases, {
-        name: `Phase ${program.phases.length + 1}`,
-        days: [{
-          id: Date.now().toString(),
-          name: 'Day 1',
-          warmup: [],
-          main: [],
-          cooldown: []
-        }]
-      }]
-    });
-  };
+  const allExercises = [...new Set(
+    clientLogs.flatMap(log => log.exercises?.map(ex => ex.name) || [])
+  )];
 
-  const updatePhase = (phaseIndex, field, value) => {
-    const updated = [...program.phases];
-    updated[phaseIndex] = { ...updated[phaseIndex], [field]: value };
-    setProgram({ ...program, phases: updated });
-  };
+  const exerciseHistory = clientLogs
+    .filter(log => log.exercises?.some(ex => ex.name === selectedExercise))
+    .map(log => {
+      const ex = log.exercises.find(e => e.name === selectedExercise);
+      const completedSets = ex?.sets?.filter(s => s.completed) || [];
+      const topSet = completedSets.reduce((best, s) => {
+        const w = parseFloat(s.weight) || 0;
+        return w > (parseFloat(best?.weight) || 0) ? s : best;
+      }, null);
+      return {
+        logId: log.id,
+        date: log.completedAt?.toDate
+          ? log.completedAt.toDate()
+          : log.completedAt ? new Date(log.completedAt) : new Date(),
+        workoutName: log.workoutName,
+        topWeight: parseFloat(topSet?.weight) || 0,
+        topReps: topSet?.reps || 0,
+        allSets: ex?.sets || [],
+        completedSets: completedSets.length,
+      };
+    })
+    .sort((a, b) => a.date - b.date);
 
-  const deletePhase = (phaseIndex) => {
-    if (!confirm('Delete this phase?')) return;
-    setProgram({
-      ...program,
-      phases: program.phases.filter((_, i) => i !== phaseIndex)
-    });
-  };
+  const maxWeight = exerciseHistory.length > 0 ? Math.max(...exerciseHistory.map(d => d.topWeight)) : 0;
 
-  const addDay = (phaseIndex) => {
-    const updated = [...program.phases];
-    updated[phaseIndex].days.push({
-      id: Date.now().toString(),
-      name: `Day ${updated[phaseIndex].days.length + 1}`,
-      warmup: [],
-      main: [],
-      cooldown: []
-    });
-    setProgram({ ...program, phases: updated });
-  };
-
-  const updateDay = (phaseIndex, dayIndex, field, value) => {
-    const updated = [...program.phases];
-    updated[phaseIndex].days[dayIndex] = { ...updated[phaseIndex].days[dayIndex], [field]: value };
-    setProgram({ ...program, phases: updated });
-  };
-
-  const deleteDay = (phaseIndex, dayIndex) => {
-    if (!confirm('Delete this day?')) return;
-    const updated = [...program.phases];
-    updated[phaseIndex].days = updated[phaseIndex].days.filter((_, i) => i !== dayIndex);
-    setProgram({ ...program, phases: updated });
-  };
-
-  const addExercise = (phaseIndex, dayIndex, section) => {
-    const updated = [...program.phases];
-    updated[phaseIndex].days[dayIndex][section].push({
-      id: Date.now().toString(),
-      name: '',
-      sets: '',
-      reps: '',
-      weight: '',
-      tempo: '',
-      rpe: '',
-      rest: '',
-      notes: ''
-    });
-    setProgram({ ...program, phases: updated });
-  };
-
-  const updateExercise = (phaseIndex, dayIndex, section, exerciseIndex, field, value) => {
-    const updated = [...program.phases];
-    updated[phaseIndex].days[dayIndex][section][exerciseIndex] = {
-      ...updated[phaseIndex].days[dayIndex][section][exerciseIndex],
-      [field]: value
-    };
-    setProgram({ ...program, phases: updated });
-  };
-
-  const deleteExercise = (phaseIndex, dayIndex, section, exerciseIndex) => {
-    const updated = [...program.phases];
-    updated[phaseIndex].days[dayIndex][section] = updated[phaseIndex].days[dayIndex][section].filter((_, i) => i !== exerciseIndex);
-    setProgram({ ...program, phases: updated });
-  };
-
-  const renderBulkAddPanel = (phaseIndex, dayIndex, section) => {
-    const [bulkText, setBulkText] = useState('');
-
-    const handleBulkAdd = () => {
-      const lines = bulkText.split('\n').filter(line => line.trim());
-      const newExercises = lines.map(line => {
-        const match = line.match(/^(.+?)\s*[-–]\s*(\d+)\s*x\s*(\d+)/);
-        if (match) {
-          return {
-            id: Date.now().toString() + Math.random(),
-            name: match[1].trim(),
-            sets: match[2],
-            reps: match[3],
-            weight: '',
-            tempo: '',
-            rpe: '',
-            rest: '',
-            notes: ''
-          };
-        }
-        return {
-          id: Date.now().toString() + Math.random(),
-          name: line.trim(),
-          sets: '',
-          reps: '',
-          weight: '',
-          tempo: '',
-          rpe: '',
-          rest: '',
-          notes: ''
-        };
-      });
-
-      const updated = [...program.phases];
-      updated[phaseIndex].days[dayIndex][section] = [
-        ...updated[phaseIndex].days[dayIndex][section],
-        ...newExercises
-      ];
-      setProgram({ ...program, phases: updated });
-      setShowBulkAdd(null);
-    };
-
+  if (detailedLog) {
+    const log = workoutLogs.find(l => l.id === detailedLog);
+    if (!log) { setDetailedLog(null); return null; }
     return (
-      <div style={{ background: '#f9f9f9', padding: '16px', borderRadius: '4px', marginTop: '12px' }}>
-        <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>Bulk Add Exercises</div>
-        <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
-          Format: "Exercise Name - Sets x Reps" (e.g., "Squat - 3 x 8")
+      <div>
+        <button onClick={() => setDetailedLog(null)} style={{ ...S.btn("ghost"), marginBottom: 20, fontSize: 13 }}>← BACK</button>
+        <div style={{ fontSize: 28, fontFamily: F.display, marginBottom: 4 }}>{log.workoutName}</div>
+        <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginBottom: 16 }}>
+          {log.completedAt?.toDate
+            ? log.completedAt.toDate().toLocaleString()
+            : log.completedAt ? new Date(log.completedAt).toLocaleString() : "–"}
+          {log.duration ? ` · ${Math.floor(log.duration / 60)} min` : ""}
         </div>
-        <textarea
-          value={bulkText}
-          onChange={(e) => setBulkText(e.target.value)}
-          placeholder="Squat - 3 x 8&#10;Bench Press - 4 x 6&#10;Deadlift - 3 x 5"
-          style={{ width: '100%', minHeight: '100px', padding: '8px', fontFamily: 'monospace', fontSize: '13px', marginBottom: '8px' }}
-        />
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={handleBulkAdd} style={{ background: '#FF4D1C', color: 'white', border: 'none', padding: '8px 16px', cursor: 'pointer', fontSize: '12px', fontFamily: '"Bebas Neue", sans-serif' }}>
-            ADD
-          </button>
-          <button onClick={() => setShowBulkAdd(null)} style={{ background: '#888', color: 'white', border: 'none', padding: '8px 16px', cursor: 'pointer', fontSize: '12px', fontFamily: '"Bebas Neue", sans-serif' }}>
-            CANCEL
-          </button>
-        </div>
+        {log.notes && (
+          <div style={{ ...S.card, fontFamily: F.body, fontSize: 13, color: C.textMuted, fontStyle: "italic", marginBottom: 16 }}>
+            "{log.notes}"
+          </div>
+        )}
+        {log.exercises?.map((ex, i) => (
+          <div key={i} style={S.card}>
+            <div style={{ fontSize: 18, fontFamily: F.display, marginBottom: 12 }}>{ex.name}</div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: F.body, fontSize: 12 }}>
+              <thead>
+                <tr>
+                  {["SET", "WEIGHT", "REPS", "DONE"].map(h => (
+                    <th key={h} style={{ textAlign: "left", color: C.textMuted, fontWeight: 700, letterSpacing: "0.1em", paddingBottom: 8, fontSize: 10 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {ex.sets?.map((s, si) => (
+                  <tr key={si} style={{ borderTop: `1px solid ${C.border}` }}>
+                    <td style={{ padding: "8px 0", fontFamily: F.display, fontSize: 16 }}>{s.setNumber}</td>
+                    <td style={{ padding: "8px 0", color: s.completed ? C.text : C.textMuted }}>{s.weight ? `${s.weight} lbs` : "–"}</td>
+                    <td style={{ padding: "8px 0", color: s.completed ? C.text : C.textMuted }}>{s.reps || "–"}</td>
+                    <td style={{ padding: "8px 0" }}>
+                      <span style={{ color: s.completed ? C.accentGreen : C.textDim, fontSize: 14 }}>
+                        {s.completed ? "✓" : "–"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
       </div>
     );
-  };
+  }
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      <div style={{ background: 'white', padding: '24px', borderRadius: '8px', marginBottom: '20px' }}>
-        <h2 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '32px', marginBottom: '20px' }}>
-          {program.id ? 'EDIT PROGRAM' : 'NEW PROGRAM'}
-        </h2>
-
-        <div style={{ marginBottom: '16px' }}>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>Program Name</label>
-          <input
-            type="text"
-            value={program.name}
-            onChange={(e) => setProgram({ ...program, name: e.target.value })}
-            style={{ width: '100%', padding: '12px', fontSize: '16px', border: '1px solid #ddd', borderRadius: '4px' }}
-            placeholder="Enter program name"
-          />
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 20 }}>
+        <div>
+          <div style={S.sectionTitle}>PROGRESS</div>
+          <div style={S.sectionSub}>
+            {selectedClient ? (selectedClient.name || selectedClient.email)?.toUpperCase() : "ALL CLIENTS"}
+          </div>
         </div>
+        <select
+          value={selectedClientId || ""}
+          onChange={e => onSelectClient(e.target.value || null)}
+          style={{ ...S.input, width: "auto", minWidth: 180, fontFamily: F.body, fontSize: 13 }}
+        >
+          <option value="">All Clients</option>
+          {clients.map(c => (
+            <option key={c.id} value={c.id}>{c.name || c.email}</option>
+          ))}
+        </select>
+      </div>
 
-        <div style={{ marginBottom: '16px' }}>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>Description</label>
-          <textarea
-            value={program.description}
-            onChange={(e) => setProgram({ ...program, description: e.target.value })}
-            style={{ width: '100%', padding: '12px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px', minHeight: '80px' }}
-            placeholder="Enter program description"
-          />
-        </div>
+      {/* Summary stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 24 }}>
+        <StatCard label="Total Sessions" value={clientLogs.length} color={C.accent} />
+        <StatCard label="Exercises Tracked" value={allExercises.length} color={C.accentBlue} />
+        <StatCard label="This Month" value={clientLogs.filter(l => {
+          const d = l.completedAt?.toDate ? l.completedAt.toDate() : new Date(l.completedAt || 0);
+          return (Date.now() - d.getTime()) < 30 * 24 * 60 * 60 * 1000;
+        }).length} color={C.accentGreen} sub="workouts" />
+      </div>
 
-        <div style={{ marginBottom: '24px' }}>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>Tags (comma-separated)</label>
-          <input
-            type="text"
-            value={program.tags?.join(', ') || ''}
-            onChange={(e) => setProgram({ ...program, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })}
-            style={{ width: '100%', padding: '12px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-            placeholder="e.g., strength, hypertrophy, beginner"
-          />
-        </div>
+      {/* Exercise deep dive */}
+      <div style={{ marginBottom: 20 }}>
+        <label style={S.label}>EXERCISE PROGRESS TRACKER</label>
+        <select
+          value={selectedExercise}
+          onChange={e => setSelectedExercise(e.target.value)}
+          style={{ ...S.input, fontFamily: F.body }}
+        >
+          <option value="">— Select an exercise —</option>
+          {allExercises.map(name => <option key={name} value={name}>{name}</option>)}
+        </select>
+      </div>
 
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button onClick={onSave} style={{ background: '#FF4D1C', color: 'white', border: 'none', padding: '12px 24px', fontSize: '16px', cursor: 'pointer', fontFamily: '"Bebas Neue", sans-serif' }}>
-            SAVE PROGRAM
-          </button>
-          <button onClick={onCancel} style={{ background: '#888', color: 'white', border: 'none', padding: '12px 24px', fontSize: '16px', cursor: 'pointer', fontFamily: '"Bebas Neue", sans-serif' }}>
-            CANCEL
-          </button>
+      {selectedExercise && exerciseHistory.length > 0 && (
+        <>
+          {/* Best weight visual */}
+          <div style={{ ...S.card, border: `1px solid ${C.accent}44`, marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.15em" }}>BEST SET — {selectedExercise.toUpperCase()}</div>
+                <div style={{ fontSize: 56, fontFamily: F.display, color: C.accent, lineHeight: 1, marginTop: 4 }}>
+                  {maxWeight > 0 ? maxWeight : "–"} <span style={{ fontSize: 24, color: C.textMuted }}>LBS</span>
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted }}>SESSIONS</div>
+                <div style={{ fontSize: 40, fontFamily: F.display, color: C.accentBlue }}>{exerciseHistory.length}</div>
+              </div>
+            </div>
+
+            {/* Progress bars */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {exerciseHistory.slice(-6).map((entry, i) => {
+                const pct = maxWeight > 0 ? (entry.topWeight / maxWeight) * 100 : 0;
+                const isLatest = i === exerciseHistory.slice(-6).length - 1;
+                return (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, minWidth: 50 }}>
+                      {entry.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </div>
+                    <div style={{ flex: 1, height: 6, background: C.surface, borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{
+                        height: "100%", borderRadius: 3,
+                        background: isLatest ? C.accent : C.accentBlue + "88",
+                        width: `${pct}%`, transition: "width 0.5s ease"
+                      }} />
+                    </div>
+                    <div style={{ fontSize: 12, fontFamily: F.display, color: isLatest ? C.accent : C.text, minWidth: 60, textAlign: "right" }}>
+                      {entry.topWeight > 0 ? `${entry.topWeight}lbs` : "–"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Session history table */}
+          <div style={S.card}>
+            <div style={{ fontSize: 16, fontFamily: F.display, marginBottom: 12 }}>SESSION BREAKDOWN</div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: F.body, fontSize: 12 }}>
+              <thead>
+                <tr>
+                  {["DATE", "WORKOUT", "TOP WEIGHT", "REPS", "SETS DONE", ""].map(h => (
+                    <th key={h} style={{ textAlign: "left", color: C.textMuted, fontWeight: 700, letterSpacing: "0.1em", paddingBottom: 10, fontSize: 10, borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {exerciseHistory.slice().reverse().map((entry, i) => (
+                  <tr key={i} style={{ borderTop: `1px solid ${C.border}` }}>
+                    <td style={{ padding: "10px 0", color: C.textMuted }}>{entry.date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}</td>
+                    <td style={{ padding: "10px 0", fontFamily: F.display, fontSize: 14 }}>{entry.workoutName}</td>
+                    <td style={{ padding: "10px 0", fontFamily: F.display, fontSize: 16, color: i === 0 ? C.accent : C.text }}>
+                      {entry.topWeight > 0 ? `${entry.topWeight}` : "–"} <span style={{ fontSize: 10, color: C.textMuted }}>lbs</span>
+                    </td>
+                    <td style={{ padding: "10px 0", color: C.textMuted }}>{entry.topReps || "–"}</td>
+                    <td style={{ padding: "10px 0", color: C.accentGreen }}>{entry.completedSets}</td>
+                    <td style={{ padding: "10px 0" }}>
+                      <button onClick={() => setDetailedLog(entry.logId)} style={{
+                        background: "transparent", border: `1px solid ${C.border}`, borderRadius: 6,
+                        padding: "4px 10px", color: C.textMuted, cursor: "pointer", fontSize: 11, fontFamily: F.body
+                      }}>VIEW</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {selectedExercise && exerciseHistory.length === 0 && (
+        <div style={{ textAlign: "center", padding: "40px 0", color: C.textMuted, fontFamily: F.body, fontSize: 13 }}>
+          No data for this exercise yet
         </div>
+      )}
+
+      {/* All workout logs */}
+      {!selectedExercise && (
+        <>
+          <div style={{ fontSize: 18, fontFamily: F.display, letterSpacing: "0.05em", marginBottom: 12 }}>ALL WORKOUTS</div>
+          {clientLogs.slice(0, 20).map((log, i) => (
+            <div key={log.id || i}
+              onClick={() => setDetailedLog(log.id)}
+              style={{ ...S.card, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 16, fontFamily: F.display }}>{log.workoutName}</div>
+                <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>
+                  {log.completedAt?.toDate
+                    ? log.completedAt.toDate().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+                    : log.completedAt ? new Date(log.completedAt).toLocaleDateString() : "–"}
+                  {log.duration ? ` · ${Math.floor(log.duration / 60)}min` : ""}
+                  {log.exercises ? ` · ${log.exercises.length} exercises` : ""}
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {log.rating && <div style={{ fontFamily: F.display, fontSize: 18, color: C.accent }}>{log.rating}★</div>}
+                <div style={{ color: C.textDim, fontSize: 20 }}>›</div>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Programs Tab ─────────────────────────────────────────────────────────────
+function ProgramsTab() {
+  const phases = [
+    { name: "RESET", week: "1–2", color: C.accentBlue, desc: "Foundation movement patterns, mobility, habit building" },
+    { name: "REBUILD", week: "3–4", color: C.accentGreen, desc: "Progressive overload introduction, increasing intensity" },
+    { name: "STRENGTHEN", week: "5–6", color: C.accent, desc: "Compound lifts, strength targets, performance tracking" },
+    { name: "OWN IT", week: "7–8", color: C.accentRed, desc: "Peak performance week, client autonomy, sustainability" },
+  ];
+
+  const workouts = [
+    { day: "Monday", name: "Lower Body A", exercises: 4, focus: "Squat pattern, posterior chain" },
+    { day: "Wednesday", name: "Upper Body A", exercises: 4, focus: "Push/pull balance, shoulder health" },
+    { day: "Friday", name: "Full Body", exercises: 4, focus: "Compound movements, total body stimulus" },
+  ];
+
+  return (
+    <div>
+      <div style={{ marginBottom: 24 }}>
+        <div style={S.sectionTitle}>PROGRAMS</div>
+        <div style={S.sectionSub}>REBUILD METHOD — 8 WEEK PLAN</div>
       </div>
 
       {/* Phases */}
-      {program.phases.map((phase, phaseIndex) => (
-        <div key={phaseIndex} style={{ background: 'white', padding: '24px', borderRadius: '8px', marginBottom: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <input
-              type="text"
-              value={phase.name}
-              onChange={(e) => updatePhase(phaseIndex, 'name', e.target.value)}
-              style={{ fontSize: '24px', fontFamily: '"Bebas Neue", sans-serif', border: 'none', borderBottom: '2px solid #FF4D1C', padding: '4px 0', width: '300px' }}
-            />
-            <button onClick={() => deletePhase(phaseIndex)} style={{ background: '#d32f2f', color: 'white', border: 'none', padding: '8px 16px', cursor: 'pointer', fontSize: '12px', fontFamily: '"Bebas Neue", sans-serif' }}>
-              DELETE PHASE
-            </button>
-          </div>
-
-          {phase.days.map((day, dayIndex) => (
-            <div key={dayIndex} style={{ background: '#f9f9f9', padding: '20px', borderRadius: '4px', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <input
-                  type="text"
-                  value={day.name}
-                  onChange={(e) => updateDay(phaseIndex, dayIndex, 'name', e.target.value)}
-                  style={{ fontSize: '18px', fontFamily: '"Bebas Neue", sans-serif', border: 'none', borderBottom: '1px solid #333', padding: '4px 0', background: 'transparent', width: '200px' }}
-                />
-                <button onClick={() => deleteDay(phaseIndex, dayIndex)} style={{ background: '#d32f2f', color: 'white', border: 'none', padding: '6px 12px', cursor: 'pointer', fontSize: '11px', fontFamily: '"Bebas Neue", sans-serif' }}>
-                  DELETE DAY
-                </button>
-              </div>
-
-              {/* Warmup */}
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#666' }}>WARMUP</div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => addExercise(phaseIndex, dayIndex, 'warmup')} style={{ background: '#FF4D1C', color: 'white', border: 'none', padding: '6px 12px', cursor: 'pointer', fontSize: '11px', fontFamily: '"Bebas Neue", sans-serif' }}>
-                      + ADD
-                    </button>
-                    <button onClick={() => setShowBulkAdd({ phaseIndex, dayIndex, section: 'warmup' })} style={{ background: '#666', color: 'white', border: 'none', padding: '6px 12px', cursor: 'pointer', fontSize: '11px', fontFamily: '"Bebas Neue", sans-serif' }}>
-                      BULK ADD
-                    </button>
-                  </div>
-                </div>
-                {showBulkAdd?.phaseIndex === phaseIndex && showBulkAdd?.dayIndex === dayIndex && showBulkAdd?.section === 'warmup' && renderBulkAddPanel(phaseIndex, dayIndex, 'warmup')}
-                {day.warmup.map((exercise, exIndex) => (
-                  <ExerciseCard
-                    key={exIndex}
-                    exercise={exercise}
-                    exercises={exercises}
-                    onChange={(field, value) => updateExercise(phaseIndex, dayIndex, 'warmup', exIndex, field, value)}
-                    onDelete={() => deleteExercise(phaseIndex, dayIndex, 'warmup', exIndex)}
-                  />
-                ))}
-              </div>
-
-              {/* Main */}
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#666' }}>MAIN</div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => addExercise(phaseIndex, dayIndex, 'main')} style={{ background: '#FF4D1C', color: 'white', border: 'none', padding: '6px 12px', cursor: 'pointer', fontSize: '11px', fontFamily: '"Bebas Neue", sans-serif' }}>
-                      + ADD
-                    </button>
-                    <button onClick={() => setShowBulkAdd({ phaseIndex, dayIndex, section: 'main' })} style={{ background: '#666', color: 'white', border: 'none', padding: '6px 12px', cursor: 'pointer', fontSize: '11px', fontFamily: '"Bebas Neue", sans-serif' }}>
-                      BULK ADD
-                    </button>
-                  </div>
-                </div>
-                {showBulkAdd?.phaseIndex === phaseIndex && showBulkAdd?.dayIndex === dayIndex && showBulkAdd?.section === 'main' && renderBulkAddPanel(phaseIndex, dayIndex, 'main')}
-                {day.main.map((exercise, exIndex) => (
-                  <ExerciseCard
-                    key={exIndex}
-                    exercise={exercise}
-                    exercises={exercises}
-                    onChange={(field, value) => updateExercise(phaseIndex, dayIndex, 'main', exIndex, field, value)}
-                    onDelete={() => deleteExercise(phaseIndex, dayIndex, 'main', exIndex)}
-                  />
-                ))}
-              </div>
-
-              {/* Cooldown */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#666' }}>COOLDOWN</div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => addExercise(phaseIndex, dayIndex, 'cooldown')} style={{ background: '#FF4D1C', color: 'white', border: 'none', padding: '6px 12px', cursor: 'pointer', fontSize: '11px', fontFamily: '"Bebas Neue", sans-serif' }}>
-                      + ADD
-                    </button>
-                    <button onClick={() => setShowBulkAdd({ phaseIndex, dayIndex, section: 'cooldown' })} style={{ background: '#666', color: 'white', border: 'none', padding: '6px 12px', cursor: 'pointer', fontSize: '11px', fontFamily: '"Bebas Neue", sans-serif' }}>
-                      BULK ADD
-                    </button>
-                  </div>
-                </div>
-                {showBulkAdd?.phaseIndex === phaseIndex && showBulkAdd?.dayIndex === dayIndex && showBulkAdd?.section === 'cooldown' && renderBulkAddPanel(phaseIndex, dayIndex, 'cooldown')}
-                {day.cooldown.map((exercise, exIndex) => (
-                  <ExerciseCard
-                    key={exIndex}
-                    exercise={exercise}
-                    exercises={exercises}
-                    onChange={(field, value) => updateExercise(phaseIndex, dayIndex, 'cooldown', exIndex, field, value)}
-                    onDelete={() => deleteExercise(phaseIndex, dayIndex, 'cooldown', exIndex)}
-                  />
-                ))}
-              </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 28 }}>
+        {phases.map((phase, i) => (
+          <div key={i} style={{ background: C.card, border: `1px solid ${phase.color}44`, borderRadius: 10, padding: "16px" }}>
+            <div style={{ fontSize: 10, fontFamily: F.body, color: phase.color, fontWeight: 700, letterSpacing: "0.15em", marginBottom: 4 }}>
+              WK {phase.week}
             </div>
-          ))}
+            <div style={{ fontSize: 22, fontFamily: F.display, color: phase.color }}>{phase.name}</div>
+            <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 6, lineHeight: 1.5 }}>{phase.desc}</div>
+          </div>
+        ))}
+      </div>
 
-          <button onClick={() => addDay(phaseIndex)} style={{ background: '#333', color: 'white', border: 'none', padding: '10px 20px', cursor: 'pointer', fontSize: '12px', fontFamily: '"Bebas Neue", sans-serif' }}>
-            + ADD DAY
-          </button>
+      {/* Workouts */}
+      <div style={{ fontSize: 18, fontFamily: F.display, marginBottom: 12 }}>WEEKLY STRUCTURE</div>
+      {workouts.map((w, i) => (
+        <div key={i} style={S.card}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.15em" }}>{w.day.toUpperCase()}</div>
+              <div style={{ fontSize: 22, fontFamily: F.display, marginTop: 2 }}>{w.name}</div>
+              <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>{w.focus}</div>
+            </div>
+            <span style={S.pill(C.accent)}>{w.exercises} exercises</span>
+          </div>
         </div>
       ))}
 
-      <button onClick={addPhase} style={{ background: '#333', color: 'white', border: 'none', padding: '12px 24px', cursor: 'pointer', fontSize: '14px', fontFamily: '"Bebas Neue", sans-serif' }}>
-        + ADD PHASE
-      </button>
-    </div>
-  );
-}
-
-// ============= EXERCISE CARD =============
-function ExerciseCard({ exercise, exercises, onChange, onDelete }) {
-  return (
-    <div style={{ background: 'white', padding: '12px', borderRadius: '4px', marginBottom: '8px', border: '1px solid #e0e0e0' }}>
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-        <select
-          value={exercise.name}
-          onChange={(e) => onChange('name', e.target.value)}
-          style={{ flex: 2, padding: '8px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-        >
-          <option value="">Select exercise</option>
-          {exercises.map(ex => (
-            <option key={ex.id} value={ex.name}>{ex.name}</option>
-          ))}
-        </select>
-        <input type="text" value={exercise.sets} onChange={(e) => onChange('sets', e.target.value)} placeholder="Sets" style={{ flex: 1, padding: '8px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }} />
-        <input type="text" value={exercise.reps} onChange={(e) => onChange('reps', e.target.value)} placeholder="Reps" style={{ flex: 1, padding: '8px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }} />
-        <button onClick={onDelete} style={{ background: '#d32f2f', color: 'white', border: 'none', padding: '8px 12px', cursor: 'pointer', fontSize: '11px', fontFamily: '"Bebas Neue", sans-serif' }}>
-          ✕
-        </button>
-      </div>
-      <div style={{ display: 'flex', gap: '8px' }}>
-        <input type="text" value={exercise.weight} onChange={(e) => onChange('weight', e.target.value)} placeholder="Weight" style={{ flex: 1, padding: '6px', fontSize: '13px', border: '1px solid #ddd', borderRadius: '4px' }} />
-        <input type="text" value={exercise.tempo} onChange={(e) => onChange('tempo', e.target.value)} placeholder="Tempo" style={{ flex: 1, padding: '6px', fontSize: '13px', border: '1px solid #ddd', borderRadius: '4px' }} />
-        <input type="text" value={exercise.rpe} onChange={(e) => onChange('rpe', e.target.value)} placeholder="RPE" style={{ flex: 1, padding: '6px', fontSize: '13px', border: '1px solid #ddd', borderRadius: '4px' }} />
-        <input type="text" value={exercise.rest} onChange={(e) => onChange('rest', e.target.value)} placeholder="Rest" style={{ flex: 1, padding: '6px', fontSize: '13px', border: '1px solid #ddd', borderRadius: '4px' }} />
-      </div>
-    </div>
-  );
-}
-
-// ============= PROGRAM PREVIEW =============
-function ProgramPreview({ program, onClose }) {
-  return (
-    <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-      <div style={{ background: 'white', padding: '32px', borderRadius: '8px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
-          <div>
-            <h2 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '36px', marginBottom: '8px' }}>{program.name}</h2>
-            {program.description && <p style={{ color: '#666', fontSize: '16px' }}>{program.description}</p>}
-          </div>
-          <button onClick={onClose} style={{ background: '#888', color: 'white', border: 'none', padding: '10px 20px', cursor: 'pointer', fontSize: '14px', fontFamily: '"Bebas Neue", sans-serif' }}>
-            CLOSE
-          </button>
-        </div>
-
-        {program.phases?.map((phase, phaseIdx) => (
-          <div key={phaseIdx} style={{ marginBottom: '32px' }}>
-            <h3 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '28px', marginBottom: '16px', color: '#FF4D1C' }}>{phase.name}</h3>
-            {phase.days?.map((day, dayIdx) => (
-              <div key={dayIdx} style={{ background: '#f9f9f9', padding: '20px', borderRadius: '4px', marginBottom: '16px' }}>
-                <h4 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '20px', marginBottom: '12px' }}>{day.name}</h4>
-                
-                {day.warmup?.length > 0 && (
-                  <div style={{ marginBottom: '16px' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '8px' }}>WARMUP</div>
-                    {day.warmup.map((ex, i) => (
-                      <div key={i} style={{ fontSize: '14px', marginBottom: '4px' }}>• {ex.name} {ex.sets && `- ${ex.sets} x ${ex.reps}`}</div>
-                    ))}
-                  </div>
-                )}
-
-                {day.main?.length > 0 && (
-                  <div style={{ marginBottom: '16px' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '8px' }}>MAIN</div>
-                    {day.main.map((ex, i) => (
-                      <div key={i} style={{ fontSize: '14px', marginBottom: '4px' }}>• {ex.name} {ex.sets && `- ${ex.sets} x ${ex.reps}`}</div>
-                    ))}
-                  </div>
-                )}
-
-                {day.cooldown?.length > 0 && (
-                  <div>
-                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '8px' }}>COOLDOWN</div>
-                    {day.cooldown.map((ex, i) => (
-                      <div key={i} style={{ fontSize: '14px', marginBottom: '4px' }}>• {ex.name} {ex.sets && `- ${ex.sets} x ${ex.reps}`}</div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ============= EXERCISE LIBRARY =============
-function ExerciseLibrary({ user }) {
-  const [exercises, setExercises] = useState([]);
-  const [newExercise, setNewExercise] = useState({ name: '', category: '', description: '', videoUrl: '' });
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState('all');
-
-  useEffect(() => {
-    loadExercises();
-  }, []);
-
-  const loadExercises = async () => {
-    const snapshot = await getDocs(collection(db, 'exercises'));
-    setExercises(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-  };
-
-  const addExercise = async () => {
-    if (!newExercise.name) {
-      alert('Please enter an exercise name');
-      return;
-    }
-    try {
-      await addDoc(collection(db, 'exercises'), {
-        ...newExercise,
-        createdAt: Timestamp.now()
-      });
-      setNewExercise({ name: '', category: '', description: '', videoUrl: '' });
-      loadExercises();
-    } catch (error) {
-      console.error('Error adding exercise:', error);
-    }
-  };
-
-  const deleteExercise = async (id) => {
-    if (!confirm('Delete this exercise?')) return;
-    try {
-      await deleteDoc(doc(db, 'exercises', id));
-      loadExercises();
-    } catch (error) {
-      console.error('Error deleting exercise:', error);
-    }
-  };
-
-  const filteredExercises = exercises.filter(ex => {
-    const matchesSearch = ex.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = filterCategory === 'all' || ex.category === filterCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  const categories = [...new Set(exercises.map(ex => ex.category).filter(Boolean))];
-
-  return (
-    <div>
-      <h2 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '36px', marginBottom: '30px' }}>EXERCISE LIBRARY</h2>
-
-      <div style={{ background: 'white', padding: '24px', borderRadius: '8px', marginBottom: '30px' }}>
-        <h3 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '24px', marginBottom: '16px' }}>ADD NEW EXERCISE</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px', marginBottom: '12px' }}>
-          <input
-            type="text"
-            value={newExercise.name}
-            onChange={(e) => setNewExercise({ ...newExercise, name: e.target.value })}
-            placeholder="Exercise name"
-            style={{ padding: '12px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-          />
-          <input
-            type="text"
-            value={newExercise.category}
-            onChange={(e) => setNewExercise({ ...newExercise, category: e.target.value })}
-            placeholder="Category (e.g., Legs, Push)"
-            style={{ padding: '12px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-          />
-        </div>
-        <textarea
-          value={newExercise.description}
-          onChange={(e) => setNewExercise({ ...newExercise, description: e.target.value })}
-          placeholder="Description"
-          style={{ width: '100%', padding: '12px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px', marginBottom: '12px', minHeight: '60px' }}
-        />
-        <input
-          type="text"
-          value={newExercise.videoUrl}
-          onChange={(e) => setNewExercise({ ...newExercise, videoUrl: e.target.value })}
-          placeholder="Video URL (optional)"
-          style={{ width: '100%', padding: '12px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px', marginBottom: '12px' }}
-        />
-        <button onClick={addExercise} style={{ background: '#FF4D1C', color: 'white', border: 'none', padding: '12px 24px', cursor: 'pointer', fontSize: '14px', fontFamily: '"Bebas Neue", sans-serif' }}>
-          ADD EXERCISE
-        </button>
-      </div>
-
-      <div style={{ background: 'white', padding: '24px', borderRadius: '8px' }}>
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search exercises..."
-            style={{ flex: 1, padding: '12px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-          />
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            style={{ padding: '12px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-          >
-            <option value="all">All Categories</option>
-            {categories.map(cat => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-          {filteredExercises.map(exercise => (
-            <div key={exercise.id} style={{ padding: '16px', border: '1px solid #e0e0e0', borderRadius: '4px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                <div>
-                  <div style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '4px' }}>{exercise.name}</div>
-                  {exercise.category && <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>{exercise.category}</div>}
-                </div>
-                <button onClick={() => deleteExercise(exercise.id)} style={{ background: '#d32f2f', color: 'white', border: 'none', padding: '4px 8px', cursor: 'pointer', fontSize: '11px', fontFamily: '"Bebas Neue", sans-serif' }}>
-                  DELETE
-                </button>
-              </div>
-              {exercise.description && <div style={{ fontSize: '13px', color: '#666' }}>{exercise.description}</div>}
-            </div>
-          ))}
+      <div style={{ ...S.card, border: `1px solid ${C.border}`, marginTop: 8, display: "flex", alignItems: "center", gap: 14, padding: "20px" }}>
+        <div style={{ fontSize: 32 }}>📝</div>
+        <div>
+          <div style={{ fontSize: 18, fontFamily: F.display }}>MORE PROGRAMS COMING</div>
+          <div style={{ fontSize: 12, fontFamily: F.body, color: C.textMuted }}>Custom program builder in next update</div>
         </div>
       </div>
     </div>
   );
 }
 
-// ============= CLIENTS MANAGER =============
-function ClientsManager({ user }) {
+// ─── Main App ─────────────────────────────────────────────────────────────────
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [authLoaded, setAuthLoaded] = useState(false);
+  const [tab, setTab] = useState("overview");
   const [clients, setClients] = useState([]);
-  const [programs, setPrograms] = useState([]);
-  const [newClientEmail, setNewClientEmail] = useState('');
-
-  useEffect(() => {
-    loadClients();
-    loadPrograms();
-  }, []);
-
-  const loadClients = async () => {
-    const snapshot = await getDocs(collection(db, 'clients'));
-    setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-  };
-
-  const loadPrograms = async () => {
-    const q = query(collection(db, 'programs'), where('coachId', '==', user.uid));
-    const snapshot = await getDocs(q);
-    setPrograms(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-  };
-
-  const addClient = async () => {
-    if (!newClientEmail) {
-      alert('Please enter a client email');
-      return;
-    }
-    try {
-      await addDoc(collection(db, 'clients'), {
-        email: newClientEmail,
-        coachId: user.uid,
-        createdAt: Timestamp.now()
-      });
-      setNewClientEmail('');
-      loadClients();
-    } catch (error) {
-      console.error('Error adding client:', error);
-    }
-  };
-
-  const assignProgram = async (clientId, programId) => {
-    try {
-      const program = programs.find(p => p.id === programId);
-      await updateDoc(doc(db, 'clients', clientId), {
-        assignedProgram: program,
-        assignedAt: Timestamp.now()
-      });
-      loadClients();
-    } catch (error) {
-      console.error('Error assigning program:', error);
-    }
-  };
-
-  const deleteClient = async (clientId) => {
-    if (!confirm('Remove this client?')) return;
-    try {
-      await deleteDoc(doc(db, 'clients', clientId));
-      loadClients();
-    } catch (error) {
-      console.error('Error deleting client:', error);
-    }
-  };
-
-  return (
-    <div>
-      <h2 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '36px', marginBottom: '30px' }}>CLIENTS</h2>
-
-      <div style={{ background: 'white', padding: '24px', borderRadius: '8px', marginBottom: '30px' }}>
-        <h3 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '24px', marginBottom: '16px' }}>ADD NEW CLIENT</h3>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <input
-            type="email"
-            value={newClientEmail}
-            onChange={(e) => setNewClientEmail(e.target.value)}
-            placeholder="Client email"
-            style={{ flex: 1, padding: '12px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-          />
-          <button onClick={addClient} style={{ background: '#FF4D1C', color: 'white', border: 'none', padding: '12px 24px', cursor: 'pointer', fontSize: '14px', fontFamily: '"Bebas Neue", sans-serif' }}>
-            ADD CLIENT
-          </button>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px' }}>
-        {clients.map(client => (
-          <div key={client.id} style={{ background: 'white', padding: '24px', borderRadius: '8px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-              <div>
-                <div style={{ fontWeight: 'bold', fontSize: '18px', marginBottom: '4px' }}>{client.email}</div>
-                {client.assignedProgram && (
-                  <div style={{ fontSize: '14px', color: '#666' }}>
-                    Program: {client.assignedProgram.name}
-                  </div>
-                )}
-              </div>
-              <button onClick={() => deleteClient(client.id)} style={{ background: '#d32f2f', color: 'white', border: 'none', padding: '6px 12px', cursor: 'pointer', fontSize: '11px', fontFamily: '"Bebas Neue", sans-serif' }}>
-                REMOVE
-              </button>
-            </div>
-
-            <div style={{ marginBottom: '8px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '4px' }}>
-                ASSIGN PROGRAM
-              </label>
-              <select
-                value={client.assignedProgram?.id || ''}
-                onChange={(e) => assignProgram(client.id, e.target.value)}
-                style={{ width: '100%', padding: '10px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
-              >
-                <option value="">No program assigned</option>
-                {programs.map(program => (
-                  <option key={program.id} value={program.id}>{program.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {clients.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '60px', color: '#888' }}>
-          No clients yet. Add your first client!
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============= PROGRESS TRACKER =============
-function ProgressTracker({ user }) {
   const [workoutLogs, setWorkoutLogs] = useState([]);
-  const [setSyncs, setSetSyncs] = useState([]);
-  const [clients, setClients] = useState([]);
-  const [selectedClient, setSelectedClient] = useState('all');
-  const [selectedWorkout, setSelectedWorkout] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [liveFeed, setLiveFeed] = useState([]);
+  const [selectedClientId, setSelectedClientId] = useState(null);
+  const liveFeedUnsub = useRef(null);
+
+  // Auth
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, u => { setUser(u); setAuthLoaded(true); });
+    return unsub;
+  }, []);
+
+  // Load data
+  const loadData = async () => {
+    try {
+      // Clients
+      const clientSnap = await getDocs(collection(db, "clients"));
+      setClients(clientSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+      // Workout logs
+      const logsQ = query(collection(db, "workoutLogs"), orderBy("completedAt", "desc"));
+      const logsSnap = await getDocs(logsQ);
+      setWorkoutLogs(logsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (e) { console.error("Load error:", e); }
+  };
+
+  // Live feed listener
+  const startLiveFeed = () => {
+    if (liveFeedUnsub.current) liveFeedUnsub.current();
+    const q = query(collection(db, "setSyncs"), orderBy("timestamp", "desc"));
+    liveFeedUnsub.current = onSnapshot(q, snap => {
+      const items = snap.docs.slice(0, 20).map(d => ({ id: d.id, ...d.data() }));
+      setLiveFeed(items);
+    });
+  };
 
   useEffect(() => {
+    if (!user) return;
     loadData();
-  }, [selectedClient]);
+    startLiveFeed();
+    return () => { if (liveFeedUnsub.current) liveFeedUnsub.current(); };
+  }, [user]);
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      // Load clients
-      const clientsSnapshot = await getDocs(collection(db, 'clients'));
-      const clientsList = clientsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setClients(clientsList);
-
-      // Load workout logs
-      let logsQuery = query(
-        collection(db, 'workoutLogs'),
-        orderBy('completedAt', 'desc')
-      );
-
-      if (selectedClient !== 'all') {
-        logsQuery = query(
-          collection(db, 'workoutLogs'),
-          where('userId', '==', selectedClient),
-          orderBy('completedAt', 'desc')
-        );
-      }
-
-      const logsSnapshot = await getDocs(logsQuery);
-      const logs = logsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setWorkoutLogs(logs);
-
-      // Load set syncs (real-time data)
-      const syncsSnapshot = await getDocs(
-        query(collection(db, 'setSyncs'), orderBy('syncedAt', 'desc'))
-      );
-      const syncs = syncsSnapshot.docs.map(doc => doc.data());
-      setSetSyncs(syncs);
-
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getClientEmail = (userId) => {
-    const client = clients.find(c => c.email === userId || c.id === userId);
-    return client?.email || 'Unknown';
-  };
-
-  if (loading) {
+  if (!authLoaded) {
     return (
-      <div style={{ textAlign: 'center', padding: '60px', color: '#888' }}>
-        Loading progress data...
+      <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ fontSize: 36, fontFamily: F.display, color: C.accent, letterSpacing: "0.1em" }}>LOADING...</div>
       </div>
     );
   }
+  if (!user) return <LoginScreen />;
 
-  if (selectedWorkout) {
-    return <WorkoutDetail workout={selectedWorkout} onClose={() => setSelectedWorkout(null)} />;
-  }
+  const navItems = [
+    { id: "overview", label: "OVERVIEW" },
+    { id: "clients", label: "CLIENTS" },
+    { id: "progress", label: "PROGRESS" },
+    { id: "programs", label: "PROGRAMS" },
+  ];
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-        <h2 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '36px', margin: 0 }}>CLIENT PROGRESS</h2>
-        <select
-          value={selectedClient}
-          onChange={(e) => setSelectedClient(e.target.value)}
-          style={{ padding: '12px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px', minWidth: '250px' }}
-        >
-          <option value="all">All Clients</option>
-          {clients.map(client => (
-            <option key={client.id} value={client.email}>{client.email}</option>
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: F.display }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+        select option { background: ${C.card}; color: ${C.text}; }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 2px; }
+      `}</style>
+
+      {/* Top nav */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 100,
+        background: C.surface, borderBottom: `1px solid ${C.border}`,
+        display: "flex", alignItems: "center", padding: "0 32px", height: 56,
+      }}>
+        <div style={{ marginRight: 40 }}>
+          <span style={{ fontSize: 22, color: C.accent }}>FRAME</span>
+          <span style={{ fontSize: 22, color: C.text }}>WERKS</span>
+          <span style={{ fontSize: 22, color: C.accentRed }}>.</span>
+          <span style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, marginLeft: 8, letterSpacing: "0.2em" }}>COACH</span>
+        </div>
+        <div style={{ display: "flex", gap: 4, flex: 1 }}>
+          {navItems.map(item => (
+            <button key={item.id} onClick={() => setTab(item.id)} style={{
+              background: "transparent", border: "none",
+              borderBottom: `2px solid ${tab === item.id ? C.accent : "transparent"}`,
+              color: tab === item.id ? C.accent : C.textMuted,
+              padding: "0 16px", height: 56, cursor: "pointer",
+              fontFamily: F.display, fontSize: 14, letterSpacing: "0.1em",
+              transition: "all 0.15s",
+            }}>
+              {item.label}
+            </button>
           ))}
-        </select>
+        </div>
+        {/* Live indicator */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: 20 }}>
+          <div style={{
+            width: 8, height: 8, borderRadius: "50%",
+            background: liveFeed.length > 0 ? C.accentRed : C.textDim,
+            animation: liveFeed.length > 0 ? "pulse 1.5s infinite" : "none"
+          }} />
+          <span style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, letterSpacing: "0.1em" }}>
+            {liveFeed.length > 0 ? `${liveFeed.length} LIVE` : "NO ACTIVITY"}
+          </span>
+        </div>
+        {/* User */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {user.photoURL && (
+            <img src={user.photoURL} alt="" style={{ width: 30, height: 30, borderRadius: "50%", border: `1px solid ${C.border}` }} />
+          )}
+          <button onClick={() => signOut(auth)} style={{ ...S.btn("dim"), fontSize: 11, padding: "6px 12px" }}>SIGN OUT</button>
+        </div>
       </div>
 
-      {/* Real-time Set Syncs */}
-      {setSyncs.length > 0 && (
-        <div style={{ background: '#fff3e0', padding: '20px', borderRadius: '8px', marginBottom: '30px', border: '2px solid #FF4D1C' }}>
-          <h3 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '24px', marginBottom: '16px', color: '#FF4D1C' }}>
-            🔴 LIVE ACTIVITY
-          </h3>
-          <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-            {setSyncs.slice(0, 10).map((sync, idx) => (
-              <div key={idx} style={{ fontSize: '14px', marginBottom: '8px', color: '#666' }}>
-                <span style={{ fontWeight: 'bold', color: '#FF4D1C' }}>
-                  {getClientEmail(sync.userId)}
-                </span> completed set {sync.setIndex + 1} of <strong>{sync.exerciseId}</strong> in {sync.workoutName}
-                <span style={{ fontSize: '12px', marginLeft: '8px', color: '#999' }}>
-                  {sync.syncedAt?.toDate ? sync.syncedAt.toDate().toLocaleTimeString() : 'Just now'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Completed Workouts */}
-      <div style={{ background: 'white', padding: '24px', borderRadius: '8px' }}>
-        <h3 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '24px', marginBottom: '20px' }}>
-          COMPLETED WORKOUTS
-        </h3>
-
-        {workoutLogs.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
-            No workout logs yet
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gap: '16px' }}>
-            {workoutLogs.map((log) => {
-              const logDate = log.completedAt?.toDate ? log.completedAt.toDate() : new Date(log.completedAt);
-              
-              return (
-                <div
-                  key={log.id}
-                  onClick={() => setSelectedWorkout(log)}
-                  style={{
-                    background: '#f9f9f9',
-                    padding: '20px',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    border: '1px solid #e0e0e0',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = '#f0f0f0';
-                    e.currentTarget.style.borderColor = '#FF4D1C';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = '#f9f9f9';
-                    e.currentTarget.style.borderColor = '#e0e0e0';
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                    <div>
-                      <div style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '20px', marginBottom: '4px' }}>
-                        {log.workoutName}
-                      </div>
-                      <div style={{ fontSize: '14px', color: '#666' }}>
-                        {getClientEmail(log.userId)}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '12px', color: '#888', marginBottom: '4px' }}>
-                        {logDate.toLocaleDateString()} at {logDate.toLocaleTimeString()}
-                      </div>
-                      <div style={{ fontSize: '14px', color: '#666' }}>
-                        {log.duration} • Rating: {log.rating}/10
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ fontSize: '14px', color: '#666' }}>
-                    {log.exercises?.length || 0} exercises completed
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      {/* Content */}
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 32px 60px" }}>
+        {tab === "overview" && (
+          <OverviewTab
+            clients={clients}
+            workoutLogs={workoutLogs}
+            liveFeed={liveFeed}
+            onSelectClient={id => { setSelectedClientId(id); setTab("progress"); }}
+          />
         )}
-      </div>
-    </div>
-  );
-}
-
-// ============= WORKOUT DETAIL VIEW =============
-function WorkoutDetail({ workout, onClose }) {
-  const logDate = workout.completedAt?.toDate ? workout.completedAt.toDate() : new Date(workout.completedAt);
-
-  return (
-    <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-      <div style={{ background: 'white', padding: '32px', borderRadius: '8px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
-          <div>
-            <h2 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '36px', marginBottom: '8px' }}>
-              {workout.workoutName}
-            </h2>
-            <div style={{ fontSize: '16px', color: '#666', marginBottom: '8px' }}>
-              Completed: {logDate.toLocaleDateString()} at {logDate.toLocaleTimeString()}
-            </div>
-            <div style={{ fontSize: '14px', color: '#888' }}>
-              Duration: {workout.duration} • Rating: {workout.rating}/10
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: '#888',
-              color: 'white',
-              border: 'none',
-              padding: '10px 20px',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontFamily: '"Bebas Neue", sans-serif',
-              borderRadius: '4px'
-            }}
-          >
-            CLOSE
-          </button>
-        </div>
-
-        {/* Exercise Details */}
-        {workout.exercises && workout.exercises.length > 0 ? (
-          <div>
-            <h3 style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '24px', marginBottom: '20px', color: '#FF4D1C' }}>
-              EXERCISES PERFORMED
-            </h3>
-            {workout.exercises.map((exercise, idx) => (
-              <div key={idx} style={{ background: '#f9f9f9', padding: '20px', borderRadius: '8px', marginBottom: '16px' }}>
-                <div style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '20px', marginBottom: '12px' }}>
-                  {exercise.name}
-                </div>
-
-                {exercise.sets && exercise.sets.length > 0 ? (
-                  <div style={{ display: 'grid', gap: '8px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr', gap: '12px', padding: '8px 12px', background: '#e0e0e0', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', color: '#666' }}>
-                      <div>SET</div>
-                      <div>REPS</div>
-                      <div>WEIGHT</div>
-                    </div>
-                    {exercise.sets.map((set, setIdx) => (
-                      <div key={setIdx} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr', gap: '12px', padding: '8px 12px', background: 'white', borderRadius: '4px', fontSize: '14px' }}>
-                        <div style={{ fontWeight: 'bold' }}>Set {setIdx + 1}</div>
-                        <div>{set.reps || '—'}</div>
-                        <div>{set.weight ? `${set.weight} lbs` : '—'}</div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: '14px', color: '#888' }}>
-                    No set data recorded
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
-            No exercise data available for this workout
-          </div>
+        {tab === "clients" && (
+          <ClientsTab
+            clients={clients}
+            workoutLogs={workoutLogs}
+            selectedClientId={selectedClientId}
+            onSelectClient={id => { setSelectedClientId(id); setTab("progress"); }}
+            onAddClient={loadData}
+          />
         )}
+        {tab === "progress" && (
+          <ProgressTab
+            clients={clients}
+            workoutLogs={workoutLogs}
+            selectedClientId={selectedClientId}
+            onSelectClient={setSelectedClientId}
+          />
+        )}
+        {tab === "programs" && <ProgramsTab />}
       </div>
     </div>
   );
