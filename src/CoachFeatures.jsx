@@ -206,7 +206,7 @@ export function ProgramEditor({ program, clients, onBack, onSaved }) {
             </div>
           </div>
         </div>
-        <div style={{display:"flex",gap:8"}}>
+        <div style={{display:"flex",gap:8}}>
           <button onClick={handleSave} disabled={saving}
             style={{...S.btn("primary"),fontSize:15,opacity:saving?0.6:1}}>
             {saving?"SAVING...":saved?"✓ SAVED":"SAVE CHANGES"}
@@ -215,7 +215,7 @@ export function ProgramEditor({ program, clients, onBack, onSaved }) {
       </div>
 
       {/* Day tabs */}
-      <div style={{display:"flex",gap:6,marginBottom:20,overflowX:"auto",paddingBottom:4,borderBottom:`1px solid ${C.border}`,paddingBottom:12}}>
+      <div style={{display:"flex",gap:6,marginBottom:20,overflowX:"auto",paddingBottom:12,borderBottom:`1px solid ${C.border}`}}>
         <button onClick={()=>setView("overview")}
           style={{...S.btn(view==="overview"?"primary":"ghost"),fontSize:12,padding:"6px 14px",flexShrink:0}}>
           OVERVIEW
@@ -306,7 +306,7 @@ function DayEditorInline({ day, dayIdx, onUpdate, onRemove, onUpdateBlock, onAdd
         {(day.warmup||[]).map((ex,i)=>(
           <div key={ex.id||i} style={{display:"flex",gap:8,marginBottom:8,alignItems:"center"}}>
             {inp(ex.name,v=>onUpdate("warmup",day.warmup.map((e,j)=>j===i?{...e,name:v}:e)),"Exercise")}
-            {inp(ex.duration,v=>onUpdate("warmup",day.warmup.map((e,j)=>j===i?{...e,duration:v}:e)),"Duration",,"text",{flex:"0 0 140px"})}
+            {inp(ex.duration,v=>onUpdate("warmup",day.warmup.map((e,j)=>j===i?{...e,duration:v}:e)),"Duration","text",{flex:"0 0 140px"})}
             <button onClick={()=>onUpdate("warmup",day.warmup.filter((_,j)=>j!==i))}
               style={{background:"transparent",border:"none",color:C.accentRed,cursor:"pointer",fontSize:16,padding:"4px 8px",flexShrink:0}}>✕</button>
           </div>
