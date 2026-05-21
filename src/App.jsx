@@ -863,7 +863,7 @@ function ProgressTab({ clients, workoutLogs, clientUserData={}, clientWeightLogs
             );
           })}
         </>
-      </div>)}
+      )}
     </div>
   );
 }
