@@ -1,4 +1,5 @@
 import ProgramDesigner from "./ProgramDesigner";
+import { ProgramEditor, ProgramCalendar, ClientAnalytics, HabitAssignment, PerfGoalAssignment, WorkoutSummaryEditor } from "./CoachFeatures";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
@@ -416,10 +417,11 @@ function ClientsTab({ clients, workoutLogs, clientUserData={}, clientWeightLogs=
 
 // ─── Programs Tab ─────────────────────────────────────────────────────────────
 function ProgramsTab({ clients }) {
-  const [view, setView] = useState("list");
-  const [programs, setPrograms] = useState([]);
+  const [view,            setView]           = useState("list");
+  const [programs,        setPrograms]        = useState([]);
   const [selectedProgram, setSelectedProgram] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading,         setLoading]         = useState(true);
+  const [showSummaryEditor, setShowSummaryEditor] = useState(false);
 
   const loadPrograms = async () => {
     setLoading(true);
@@ -432,58 +434,46 @@ function ProgramsTab({ clients }) {
 
   useEffect(() => { loadPrograms(); }, []);
 
+  // Duplicate program
+  const duplicateProgram = async (prog) => {
+    try {
+      const { id, ...data } = prog;
+      await addDoc(collection(db, "programs"), {
+        ...data,
+        name: `${prog.name} (Copy)`,
+        assignedClientId: null,
+        createdAt: serverTimestamp(),
+      });
+      loadPrograms();
+    } catch(e) { console.error(e); }
+  };
+
+  // Delete program
+  const deleteProgram = async (progId) => {
+    if(!window.confirm("Delete this program?")) return;
+    try {
+      await deleteDoc(doc(db, "programs", progId));
+      loadPrograms();
+    } catch(e) { console.error(e); }
+  };
+
   if (view === "designer") return <ProgramDesigner clients={clients} onBack={() => { setView("list"); loadPrograms(); }} />;
 
-  const blockTypeColors = { straight: C.accent, circuit: C.accentBlue, superset: C.accentGreen, emom: C.accentOrange };
+  if (view === "editor" && selectedProgram) return (
+    <ProgramEditor
+      program={selectedProgram}
+      clients={clients}
+      onBack={() => { setView("list"); loadPrograms(); }}
+      onSaved={(updated) => { setSelectedProgram(updated); loadPrograms(); }}
+    />
+  );
 
-  if (view === "detail" && selectedProgram) {
-    const assignedClient = clients.find(c => c.id === selectedProgram.assignedClientId);
-    return (
-      <div>
-        <button onClick={() => setView("list")} style={{ ...S.btn("dim"), fontSize: 12, padding: "6px 12px", marginBottom: 20 }}>← BACK</button>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
-          <div>
-            <div style={{ fontSize: 36, fontFamily: F.display }}>{selectedProgram.name}</div>
-            <div style={{ fontSize: 12, fontFamily: F.body, color: C.textMuted, marginTop: 4 }}>
-              {selectedProgram.weeks} weeks{assignedClient ? ` · Assigned to ${assignedClient.name || assignedClient.email}` : ""}
-            </div>
-          </div>
-        </div>
-        {selectedProgram.blocks?.map((block, blockIdx) => (
-          <div key={block.id || blockIdx} style={{ ...S.card, marginBottom: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-              <div style={{ fontSize: 28, fontFamily: F.display, color: blockTypeColors[block.type] || C.accent }}>{String.fromCharCode(65 + blockIdx)}</div>
-              <div style={{ fontSize: 18, fontFamily: F.display }}>{block.name}</div>
-              <span style={S.pill(blockTypeColors[block.type] || C.accent)}>{block.type}</span>
-            </div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: F.body, fontSize: 13 }}>
-              <thead>
-                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                  {["#", "EXERCISE", "SETS", "REPS", "TEMPO", "RPE", "REST", "NOTES"].map(h => (
-                    <th key={h} style={{ textAlign: "left", color: C.textMuted, fontWeight: 700, letterSpacing: "0.1em", padding: "6px 10px", fontSize: 10 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {block.exercises?.map((ex, exIdx) => (
-                  <tr key={ex.id || exIdx} style={{ borderTop: `1px solid ${C.border}55` }}>
-                    <td style={{ padding: "10px", fontFamily: F.display, fontSize: 18, color: blockTypeColors[block.type] || C.accent }}>{getBlockLabel(blockIdx, exIdx)}</td>
-                    <td style={{ padding: "10px", fontWeight: 500 }}>{ex.name}</td>
-                    <td style={{ padding: "10px", color: C.textMuted }}>{ex.sets}</td>
-                    <td style={{ padding: "10px", color: C.textMuted }}>{ex.reps}</td>
-                    <td style={{ padding: "10px", color: C.textMuted }}>{ex.tempo || "–"}</td>
-                    <td style={{ padding: "10px", color: ex.rpe ? C.accentOrange : C.textMuted }}>{ex.rpe ? `RPE ${ex.rpe}` : "–"}</td>
-                    <td style={{ padding: "10px", color: C.textMuted }}>{ex.rest || "–"}</td>
-                    <td style={{ padding: "10px", color: C.textMuted, fontStyle: "italic", fontSize: 12 }}>{ex.notes || "–"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ))}
-      </div>
-    );
-  }
+  if (view === "summaries" && selectedProgram) return (
+    <div>
+      <button onClick={() => setView("list")} style={{ ...S.btn("dim"), fontSize: 12, padding: "6px 12px", marginBottom: 20 }}>← BACK</button>
+      <WorkoutSummaryEditor program={selectedProgram} clients={clients} onClose={() => setView("list")} />
+    </div>
+  );
 
   return (
     <div>
@@ -505,21 +495,29 @@ function ProgramsTab({ clients }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
           {programs.map(program => {
             const assignedClient = clients.find(c => c.id === program.assignedClientId);
-            const totalExercises = program.blocks?.reduce((sum, b) => sum + (b.exercises?.length || 0), 0) || 0;
+            const totalExercises = (program.days||[]).reduce((s,d)=>s+(d.blocks||[]).reduce((s2,b)=>s2+(b.exercises?.length||0),0),0)
+              || (program.blocks||[]).reduce((s,b)=>s+(b.exercises?.length||0),0);
             return (
-              <div key={program.id}
-                onClick={() => { setSelectedProgram(program); setView("detail"); }}
-                style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px", cursor: "pointer" }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = C.accent + "66"}
-                onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
-              >
-                <div style={{ fontSize: 22, fontFamily: F.display, marginBottom: 6 }}>{program.name}</div>
-                <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginBottom: 12 }}>
-                  {program.weeks} weeks · {program.blocks?.length || 0} blocks · {totalExercises} exercises
+              <div key={program.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px", display: "flex", flexDirection: "column", gap: 10 }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = C.accent + "44"}
+                onMouseLeave={e => e.currentTarget.style.borderColor = C.border}>
+                <div style={{ fontSize: 22, fontFamily: F.display }}>{program.name}</div>
+                <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted }}>
+                  {program.weeks} weeks · {(program.days||program.blocks||[]).length} {program.days?"days":"blocks"} · {totalExercises} exercises
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {assignedClient && <span style={S.pill(C.accentGreen)}>{assignedClient.name || assignedClient.email}</span>}
-                  {program.blocks?.map((b, i) => <span key={i} style={S.pill(C.textDim)}>{String.fromCharCode(65 + i)}: {b.type}</span>)}
+                </div>
+                {/* Action buttons */}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: "auto", paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
+                  <button onClick={() => { setSelectedProgram(program); setView("editor"); }}
+                    style={{ ...S.btn("primary"), fontSize: 12, padding: "6px 12px", flex: 1 }}>EDIT</button>
+                  <button onClick={() => { setSelectedProgram(program); setView("summaries"); }}
+                    style={{ ...S.btn("blue"), fontSize: 12, padding: "6px 12px", flex: 1 }}>SUMMARIES</button>
+                  <button onClick={() => duplicateProgram(program)}
+                    style={{ ...S.btn("ghost"), fontSize: 12, padding: "6px 12px", flex: 1 }}>DUPLICATE</button>
+                  <button onClick={() => deleteProgram(program.id)}
+                    style={{ ...S.btn("danger"), fontSize: 12, padding: "6px 10px" }}>✕</button>
                 </div>
               </div>
             );
@@ -535,6 +533,7 @@ function ProgressTab({ clients, workoutLogs, clientUserData={}, clientWeightLogs
   const [selectedExercise, setSelectedExercise] = useState("");
   const [filterClient, setFilterClient] = useState(selectedClientId || "");
   const [detailedLog, setDetailedLog] = useState(viewLog || null);
+  const [progressSubTab, setProgressSubTab] = useState("analytics");
 
   useEffect(() => { if (viewLog) setDetailedLog(viewLog); }, [viewLog]);
   useEffect(() => { if (selectedClientId) setFilterClient(selectedClientId); }, [selectedClientId]);
@@ -611,7 +610,7 @@ function ProgressTab({ clients, workoutLogs, clientUserData={}, clientWeightLogs
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 }}>
         <div>
           <div style={S.sectionTitle}>PROGRESS</div>
           <div style={S.sectionSub}>{selectedClient ? (selectedClient.name || selectedClient.email)?.toUpperCase() : "ALL CLIENTS"}</div>
@@ -622,6 +621,67 @@ function ProgressTab({ clients, workoutLogs, clientUserData={}, clientWeightLogs
           {clients.map(c => <option key={c.id} value={c.userId || c.id}>{c.name || c.email}</option>)}
         </select>
       </div>
+
+      {/* Sub-tab: Analytics / Habits / Perf Goals — only when a client is selected */}
+      {filterClient && (() => {
+        const client = clients.find(c => c.id === filterClient || c.userId === filterClient);
+        if(!client) return null;
+        return (
+          <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+            {[
+              ["analytics","📈 ANALYTICS"],
+              ["habits","🔥 HABITS"],
+              ["perf","🎯 GOALS"],
+            ].map(([id,label]) => (
+              <button key={id} onClick={() => setProgressSubTab(id)}
+                style={{ ...S.btn(progressSubTab===id?"primary":"ghost"), fontSize: 12, padding: "7px 14px" }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* Analytics panel */}
+      {filterClient && progressSubTab === "analytics" && (() => {
+        const client = clients.find(c => c.id === filterClient || c.userId === filterClient);
+        if(!client) return null;
+        return (
+          <div style={{ marginBottom: 20 }}>
+            <ClientAnalytics
+              client={client}
+              workoutLogs={workoutLogs}
+              weightLog={clientWeightLogs[client.userId] || []}
+              userData={clientUserData[client.userId]}
+            />
+          </div>
+        );
+      })()}
+
+      {/* Habit assignment panel */}
+      {filterClient && progressSubTab === "habits" && (() => {
+        const client = clients.find(c => c.id === filterClient || c.userId === filterClient);
+        if(!client) return null;
+        return (
+          <div style={{ marginBottom: 20 }}>
+            <HabitAssignment client={client} clientUserData={clientUserData} onClose={null} />
+          </div>
+        );
+      })()}
+
+      {/* Performance goals panel */}
+      {filterClient && progressSubTab === "perf" && (() => {
+        const client = clients.find(c => c.id === filterClient || c.userId === filterClient);
+        if(!client) return null;
+        return (
+          <div style={{ marginBottom: 20 }}>
+            <PerfGoalAssignment client={client} workoutLogs={workoutLogs} clientUserData={clientUserData} onClose={null} />
+          </div>
+        );
+      })()}
+
+      {/* Workout history — shown when no client selected or on history sub-tab */}
+      {(!filterClient || progressSubTab === "history") && (<div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 16 }}>
         <StatCard label="Total Sessions" value={clientLogs.length} color={C.accent} />
@@ -803,7 +863,7 @@ function ProgressTab({ clients, workoutLogs, clientUserData={}, clientWeightLogs
             );
           })}
         </>
-      )}
+      </div>)}
     </div>
   );
 }
