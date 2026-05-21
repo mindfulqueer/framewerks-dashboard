@@ -984,6 +984,7 @@ export default function App() {
   const [viewLog, setViewLog] = useState(null);
   const [clientUserData, setClientUserData] = useState({}); // uid -> user doc data
   const [clientWeightLogs, setClientWeightLogs] = useState({}); // uid -> weight entries
+  const [clientCheckIns, setClientCheckIns] = useState({}); // uid -> { date -> checkin }
   const liveFeedUnsub = useRef(null);
 
   useEffect(() => {
@@ -1025,6 +1026,14 @@ export default function App() {
           setClientWeightLogs(prev => ({ ...prev, [uid]: wlSnap.docs.map(d => ({ id: d.id, ...d.data() })) }));
         }, () => {});
         unsubCoachRefs.current.push(unsubWL);
+        // Daily check-ins — last 30 days
+        const ciQ = query(collection(db, "checkIns"), where("userId", "==", uid), orderBy("updatedAt", "desc"));
+        const unsubCI = onSnapshot(ciQ, ciSnap => {
+          const byDate = {};
+          ciSnap.docs.forEach(d => { byDate[d.data().date] = d.data(); });
+          setClientCheckIns(prev => ({ ...prev, [uid]: byDate }));
+        }, () => {});
+        unsubCoachRefs.current.push(unsubCI);
       });
     }, err => console.warn("clients listener:", err));
     unsubCoachRefs.current.push(unsubClients);
