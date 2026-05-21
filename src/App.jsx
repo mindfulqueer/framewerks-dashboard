@@ -531,17 +531,17 @@ function ProgramsTab({ clients }) {
 // ─── Progress Tab ─────────────────────────────────────────────────────────────
 function ProgressTab({ clients, workoutLogs, clientUserData={}, clientWeightLogs={}, selectedClientId, onSelectClient, viewLog, onViewLog }) {
   const [selectedExercise, setSelectedExercise] = useState("");
-  const [filterClient, setFilterClient] = useState(selectedClientId || "");
-  const [detailedLog, setDetailedLog] = useState(viewLog || null);
-  const [progressSubTab, setProgressSubTab] = useState("analytics");
+  const [filterClient,     setFilterClient]     = useState(selectedClientId || "");
+  const [detailedLog,      setDetailedLog]      = useState(viewLog || null);
+  const [progressSubTab,   setProgressSubTab]   = useState("analytics");
 
   useEffect(() => { if (viewLog) setDetailedLog(viewLog); }, [viewLog]);
   useEffect(() => { if (selectedClientId) setFilterClient(selectedClientId); }, [selectedClientId]);
 
-  const resolveUserId = (clientIdOrUserId) => {
-    if (!clientIdOrUserId) return null;
-    const c = clients.find(c => c.id === clientIdOrUserId || c.userId === clientIdOrUserId);
-    return c?.userId || clientIdOrUserId;
+  const resolveUserId = (val) => {
+    if (!val) return null;
+    const c = clients.find(c => c.id === val || c.userId === val);
+    return c?.userId || val;
   };
 
   const clientLogs = filterClient
@@ -549,55 +549,82 @@ function ProgressTab({ clients, workoutLogs, clientUserData={}, clientWeightLogs
     : workoutLogs;
 
   const selectedClient = clients.find(c => c.id === filterClient || c.userId === filterClient);
-  const allExercises = [...new Set(clientLogs.flatMap(log => log.exercises?.map(ex => ex.name) || []))];
+  const allExercises   = [...new Set(clientLogs.flatMap(l => l.exercises?.map(e => e.name) || []))];
 
   const exerciseHistory = clientLogs
-    .filter(log => log.exercises?.some(ex => ex.name === selectedExercise))
-    .map(log => {
-      const ex = log.exercises.find(e => e.name === selectedExercise);
-      const completedSets = ex?.sets?.filter(s => s.completed) || [];
-      const topSet = completedSets.reduce((best, s) => {
-        const w = parseFloat(s.weight) || 0;
-        return w > (parseFloat(best?.weight) || 0) ? s : best;
-      }, null);
-      return { logId: log.id, date: log.completedAt?.toDate ? log.completedAt.toDate() : new Date(log.completedAt || 0), workoutName: log.workoutName, topWeight: parseFloat(topSet?.weight) || 0, topReps: topSet?.reps || 0, completedSets: completedSets.length };
+    .filter(l => l.exercises?.some(e => e.name === selectedExercise))
+    .map(l => {
+      const ex = l.exercises.find(e => e.name === selectedExercise);
+      const done = ex?.sets?.filter(s => s.completed) || [];
+      const top  = done.reduce((b, s) => parseFloat(s.weight || 0) > parseFloat(b?.weight || 0) ? s : b, null);
+      return {
+        logId: l.id,
+        date: l.completedAt?.toDate ? l.completedAt.toDate() : new Date(l.completedAt || 0),
+        workoutName: l.workoutName,
+        topWeight: parseFloat(top?.weight) || 0,
+        topReps: top?.reps || 0,
+        completedSets: done.length,
+      };
     })
     .sort((a, b) => a.date - b.date);
 
   const maxWeight = exerciseHistory.length > 0 ? Math.max(...exerciseHistory.map(d => d.topWeight)) : 0;
 
+  // ── Detailed log view ──
   if (detailedLog) {
-    const log = workoutLogs.find(l => l.id === detailedLog);
+    const log    = workoutLogs.find(l => l.id === detailedLog);
     if (!log) { setDetailedLog(null); return null; }
     const client = clients.find(c => c.userId === log.userId || c.id === log.userId);
     return (
       <div>
-        <button onClick={() => { setDetailedLog(null); onViewLog(null); }} style={{ ...S.btn("ghost"), marginBottom: 20, fontSize: 13 }}>← BACK</button>
+        <button onClick={() => { setDetailedLog(null); onViewLog(null); }}
+          style={{ ...S.btn("ghost"), marginBottom: 20, fontSize: 13 }}>← BACK</button>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
           <div>
             <div style={{ fontSize: 32, fontFamily: F.display }}>{log.workoutName}</div>
-            <div style={{ fontSize: 12, fontFamily: F.body, color: C.accentBlue, marginTop: 2 }}>{client?.name || client?.email || log.userId?.slice(0, 20)}</div>
+            <div style={{ fontSize: 12, fontFamily: F.body, color: C.accentBlue, marginTop: 2 }}>
+              {client?.name || client?.email || log.userId?.slice(0, 20)}
+            </div>
             <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>
               {fmtDateTime(log.completedAt)}{log.duration ? ` · ${Math.floor(log.duration / 60)} min` : ""}
             </div>
           </div>
-          {log.rating && <div style={{ fontSize: 48, fontFamily: F.display, color: C.accent }}>{log.rating}<span style={{ fontSize: 20, color: C.textMuted }}>★</span></div>}
+          {log.rating && (
+            <div style={{ fontSize: 48, fontFamily: F.display, color: C.accent }}>
+              {log.rating}<span style={{ fontSize: 20, color: C.textMuted }}>★</span>
+            </div>
+          )}
         </div>
-        {log.notes && <div style={{ ...S.card, fontFamily: F.body, fontSize: 13, color: C.textMuted, fontStyle: "italic", marginBottom: 16 }}>"{log.notes}"</div>}
+        {log.notes && (
+          <div style={{ ...S.card, fontFamily: F.body, fontSize: 13, color: C.textMuted, fontStyle: "italic", marginBottom: 16 }}>
+            "{log.notes}"
+          </div>
+        )}
         {log.exercises?.map((ex, i) => (
           <div key={i} style={S.card}>
             <div style={{ fontSize: 20, fontFamily: F.display, marginBottom: 12 }}>{ex.name}</div>
             <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: F.body, fontSize: 13 }}>
               <thead>
-                <tr>{["SET", "WEIGHT", "REPS", "STATUS"].map(h => <th key={h} style={{ textAlign: "left", color: C.textMuted, fontWeight: 700, letterSpacing: "0.1em", paddingBottom: 8, fontSize: 10 }}>{h}</th>)}</tr>
+                <tr>
+                  {["SET","WEIGHT","REPS","STATUS"].map(h => (
+                    <th key={h} style={{ textAlign: "left", color: C.textMuted, fontWeight: 700,
+                      letterSpacing: "0.1em", paddingBottom: 8, fontSize: 10 }}>{h}</th>
+                  ))}
+                </tr>
               </thead>
               <tbody>
                 {ex.sets?.map((s, si) => (
                   <tr key={si} style={{ borderTop: `1px solid ${C.border}` }}>
                     <td style={{ padding: "8px 0", fontFamily: F.display, fontSize: 18 }}>{s.setNumber}</td>
-                    <td style={{ padding: "8px 0", color: s.completed ? C.text : C.textMuted }}>{s.weight ? `${s.weight} lbs` : "–"}</td>
+                    <td style={{ padding: "8px 0", color: s.completed ? C.text : C.textMuted }}>
+                      {s.weight ? `${s.weight} lbs` : "–"}
+                    </td>
                     <td style={{ padding: "8px 0", color: s.completed ? C.text : C.textMuted }}>{s.reps || "–"}</td>
-                    <td style={{ padding: "8px 0" }}><span style={{ color: s.completed ? C.accentGreen : C.textDim }}>{s.completed ? "✓ Done" : "–"}</span></td>
+                    <td style={{ padding: "8px 0" }}>
+                      <span style={{ color: s.completed ? C.accentGreen : C.textDim }}>
+                        {s.completed ? "✓ Done" : "–"}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -608,260 +635,336 @@ function ProgressTab({ clients, workoutLogs, clientUserData={}, clientWeightLogs
     );
   }
 
+  // ── Main progress view ──
   return (
     <div>
+      {/* Header + client selector */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 }}>
         <div>
           <div style={S.sectionTitle}>PROGRESS</div>
-          <div style={S.sectionSub}>{selectedClient ? (selectedClient.name || selectedClient.email)?.toUpperCase() : "ALL CLIENTS"}</div>
+          <div style={S.sectionSub}>
+            {selectedClient ? (selectedClient.name || selectedClient.email)?.toUpperCase() : "ALL CLIENTS"}
+          </div>
         </div>
-        <select value={filterClient} onChange={e => { setFilterClient(e.target.value); onSelectClient(e.target.value || null); }}
+        <select value={filterClient}
+          onChange={e => { setFilterClient(e.target.value); onSelectClient(e.target.value || null); }}
           style={{ ...S.input, width: "auto", minWidth: 200, fontFamily: F.body, fontSize: 13 }}>
           <option value="">All Clients</option>
-          {clients.map(c => <option key={c.id} value={c.userId || c.id}>{c.name || c.email}</option>)}
+          {clients.map(c => (
+            <option key={c.id} value={c.userId || c.id}>{c.name || c.email}</option>
+          ))}
         </select>
       </div>
 
-      {/* Sub-tab: Analytics / Habits / Perf Goals — only when a client is selected */}
-      {filterClient && (() => {
-        const client = clients.find(c => c.id === filterClient || c.userId === filterClient);
-        if(!client) return null;
-        return (
-          <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-            {[
-              ["analytics","📈 ANALYTICS"],
-              ["habits","🔥 HABITS"],
-              ["perf","🎯 GOALS"],
-            ].map(([id,label]) => (
-              <button key={id} onClick={() => setProgressSubTab(id)}
-                style={{ ...S.btn(progressSubTab===id?"primary":"ghost"), fontSize: 12, padding: "7px 14px" }}>
-                {label}
-              </button>
-            ))}
-          </div>
-        );
-      })()}
+      {/* Sub-tabs — only when a client is selected */}
+      {filterClient && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+          {[["analytics","📈 ANALYTICS"],["habits","🔥 HABITS"],["perf","🎯 GOALS"],["history","📋 HISTORY"]].map(([id, label]) => (
+            <button key={id} onClick={() => setProgressSubTab(id)}
+              style={{ ...S.btn(progressSubTab === id ? "primary" : "ghost"), fontSize: 12, padding: "7px 14px" }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* Analytics panel */}
+      {/* Analytics */}
       {filterClient && progressSubTab === "analytics" && (() => {
         const client = clients.find(c => c.id === filterClient || c.userId === filterClient);
-        if(!client) return null;
+        if (!client) return null;
         return (
-          <div style={{ marginBottom: 20 }}>
-            <ClientAnalytics
-              client={client}
-              workoutLogs={workoutLogs}
-              weightLog={clientWeightLogs[client.userId] || []}
-              userData={clientUserData[client.userId]}
-            />
-          </div>
+          <ClientAnalytics
+            client={client}
+            workoutLogs={workoutLogs}
+            weightLog={clientWeightLogs[client.userId] || []}
+            userData={clientUserData[client.userId]}
+          />
         );
       })()}
 
-      {/* Habit assignment panel */}
+      {/* Habits */}
       {filterClient && progressSubTab === "habits" && (() => {
         const client = clients.find(c => c.id === filterClient || c.userId === filterClient);
-        if(!client) return null;
-        return (
-          <div style={{ marginBottom: 20 }}>
-            <HabitAssignment client={client} clientUserData={clientUserData} onClose={null} />
-          </div>
-        );
+        if (!client) return null;
+        return <HabitAssignment client={client} clientUserData={clientUserData} onClose={null} />;
       })()}
 
-      {/* Performance goals panel */}
+      {/* Perf goals */}
       {filterClient && progressSubTab === "perf" && (() => {
         const client = clients.find(c => c.id === filterClient || c.userId === filterClient);
-        if(!client) return null;
+        if (!client) return null;
         return (
-          <div style={{ marginBottom: 20 }}>
-            <PerfGoalAssignment client={client} workoutLogs={workoutLogs} clientUserData={clientUserData} onClose={null} />
-          </div>
+          <PerfGoalAssignment
+            client={client}
+            workoutLogs={workoutLogs}
+            clientUserData={clientUserData}
+            onClose={null}
+          />
         );
       })()}
 
-      {/* Workout history — shown when no client selected or on history sub-tab */}
-      {(!filterClient || progressSubTab === "history") && (<div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 16 }}>
-        <StatCard label="Total Sessions" value={clientLogs.length} color={C.accent} />
-        <StatCard label="Exercises Tracked" value={allExercises.length} color={C.accentBlue} />
-        <StatCard label="This Month" value={clientLogs.filter(l => { const d = l.completedAt?.toDate ? l.completedAt.toDate() : new Date(l.completedAt || 0); return (Date.now() - d.getTime()) < 30 * 24 * 60 * 60 * 1000; }).length} color={C.accentGreen} sub="workouts" />
-      </div>
-
-      {/* Client app data panel — only shows when a specific client is selected */}
-      {filterClient && (() => {
-        const uid = clients.find(c => c.id === filterClient || c.userId === filterClient)?.userId;
-        const userData = uid ? clientUserData[uid] : null;
-        const wl = uid ? clientWeightLogs[uid] : null;
-        if (!userData && !wl?.length) return null;
-        const latestWeight = wl?.[0]?.weight;
-        const goalWeight = userData?.profile?.goalWeight;
-        const todayKey = new Date().toISOString().slice(0, 10);
-        const wb = userData?.wellbeing?.[todayKey] || {};
-        const goals = (userData?.goals || []).filter(g => g.selected);
-        const perfGoals = (userData?.perfGoals || []).filter(g => g.exercise);
-        const profile = userData?.profile || {};
-        return (
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 20px", marginBottom: 20 }}>
-            <div style={{ fontSize: 14, fontFamily: F.display, letterSpacing: "0.08em", marginBottom: 14, color: C.textMuted }}>CLIENT DATA</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 14 }}>
-              {profile.height && <div style={{ textAlign: "center" }}><div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em" }}>HEIGHT</div><div style={{ fontSize: 18, fontFamily: F.display, color: C.text, marginTop: 2 }}>{profile.height}</div></div>}
-              {profile.age && <div style={{ textAlign: "center" }}><div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em" }}>AGE</div><div style={{ fontSize: 18, fontFamily: F.display, color: C.text, marginTop: 2 }}>{profile.age}</div></div>}
-              {latestWeight && <div style={{ textAlign: "center" }}><div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em" }}>WEIGHT</div><div style={{ fontSize: 18, fontFamily: F.display, color: C.accent, marginTop: 2 }}>{latestWeight} lbs</div></div>}
-              {goalWeight && <div style={{ textAlign: "center" }}><div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em" }}>GOAL WT</div><div style={{ fontSize: 18, fontFamily: F.display, color: C.accentBlue, marginTop: 2 }}>{goalWeight} lbs</div></div>}
-            </div>
-            {Object.keys(wb).length > 0 && (
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em", marginBottom: 8 }}>TODAY'S CHECK-IN</div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {[["energy","⚡"],["sleep","😴"],["soreness","💪"],["stress","🧠"]].map(([k,icon]) => wb[k] ? (
-                    <div key={k} style={{ flex: 1, textAlign: "center", background: C.surface, borderRadius: 8, padding: "8px 4px" }}>
-                      <div style={{ fontSize: 16 }}>{icon}</div>
-                      <div style={{ fontSize: 16, fontFamily: F.display, color: C.accent }}>{wb[k]}</div>
-                      <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, letterSpacing: "0.1em" }}>{k.toUpperCase()}</div>
-                    </div>
-                  ) : null)}
-                </div>
-              </div>
-            )}
-            {goals.length > 0 && (
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em", marginBottom: 6 }}>CLIENT GOALS</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {goals.map((g, i) => (
-                    <span key={i} style={{ fontSize: 11, fontFamily: F.body, background: C.accentBlue + "20", color: C.accentBlue, border: `1px solid ${C.accentBlue}33`, borderRadius: 20, padding: "3px 10px" }}>
-                      {g.name}{g.deadline ? ` · ${new Date(g.deadline).toLocaleDateString("en-US", { month: "short", year: "numeric" })}` : ""}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {perfGoals.length > 0 && (
-              <div>
-                <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em", marginBottom: 6 }}>PERFORMANCE GOALS</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {perfGoals.map((g, i) => (
-                    <span key={i} style={{ fontSize: 11, fontFamily: F.body, background: C.accent + "20", color: C.accent, border: `1px solid ${C.accent}33`, borderRadius: 20, padding: "3px 10px" }}>
-                      {g.exercise} → {g.goalWeight} lbs{g.deadline ? ` · ${new Date(g.deadline).toLocaleDateString("en-US", { month: "short", year: "numeric" })}` : ""}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {wl?.length > 0 && (
-              <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
-                <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em", marginBottom: 8 }}>WEIGHT LOG</div>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-                  {wl.slice(0, 8).map((e, i) => (
-                    <div key={i} style={{ flexShrink: 0, textAlign: "center" }}>
-                      {e.photoUrls?.[0] && <img src={e.photoUrls[0]} alt="" style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover", marginBottom: 4 }} />}
-                      <div style={{ fontSize: 13, fontFamily: F.display, color: i === 0 ? C.accent : C.text }}>{e.weight} lbs</div>
-                      <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted }}>{e.date}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      })()}
-
-      <div style={{ marginBottom: 20 }}>
-        <label style={S.label}>EXERCISE PROGRESS TRACKER</label>
-        <select value={selectedExercise} onChange={e => setSelectedExercise(e.target.value)} style={{ ...S.input, fontFamily: F.body }}>
-          <option value="">— Select an exercise to track —</option>
-          {allExercises.map(name => <option key={name} value={name}>{name}</option>)}
-        </select>
-      </div>
-
-      {selectedExercise && exerciseHistory.length > 0 && (
+      {/* History / exercise tracker — default view or explicit history tab */}
+      {(!filterClient || progressSubTab === "history") && (
         <>
-          <div style={{ ...S.card, border: `1px solid ${C.accent}44`, marginBottom: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 }}>
-              <div>
-                <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.15em" }}>BEST — {selectedExercise.toUpperCase()}</div>
-                <div style={{ fontSize: 56, fontFamily: F.display, color: C.accent, lineHeight: 1, marginTop: 4 }}>
-                  {maxWeight > 0 ? maxWeight : "–"} <span style={{ fontSize: 24, color: C.textMuted }}>LBS</span>
+          {/* Stats row */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 20 }}>
+            <StatCard label="Total Sessions" value={clientLogs.length} color={C.accent} />
+            <StatCard label="Exercises Tracked" value={allExercises.length} color={C.accentBlue} />
+            <StatCard label="This Month" value={clientLogs.filter(l => {
+              const d = l.completedAt?.toDate ? l.completedAt.toDate() : new Date(l.completedAt || 0);
+              return (Date.now() - d.getTime()) < 30 * 24 * 60 * 60 * 1000;
+            }).length} color={C.accentGreen} sub="workouts" />
+          </div>
+
+          {/* Client data panel */}
+          {filterClient && (() => {
+            const uid      = resolveUserId(filterClient);
+            const userData = uid ? clientUserData[uid] : null;
+            const wl       = uid ? clientWeightLogs[uid] : null;
+            if (!userData && !wl?.length) return null;
+            const latestWeight = wl?.[0]?.weight;
+            const goalWeight   = userData?.profile?.goalWeight;
+            const todayKey     = new Date().toISOString().slice(0, 10);
+            const wb           = userData?.wellbeing?.[todayKey] || {};
+            const goals        = (userData?.goals || []).filter(g => g.selected);
+            const perfGoals    = (userData?.perfGoals || []).filter(g => g.exercise);
+            const profile      = userData?.profile || {};
+            return (
+              <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
+                padding: "16px 20px", marginBottom: 20 }}>
+                <div style={{ fontSize: 14, fontFamily: F.display, letterSpacing: "0.08em",
+                  marginBottom: 14, color: C.textMuted }}>CLIENT DATA</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 14 }}>
+                  {profile.height && (
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em" }}>HEIGHT</div>
+                      <div style={{ fontSize: 18, fontFamily: F.display, color: C.text, marginTop: 2 }}>{profile.height}</div>
+                    </div>
+                  )}
+                  {profile.age && (
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em" }}>AGE</div>
+                      <div style={{ fontSize: 18, fontFamily: F.display, color: C.text, marginTop: 2 }}>{profile.age}</div>
+                    </div>
+                  )}
+                  {latestWeight && (
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em" }}>WEIGHT</div>
+                      <div style={{ fontSize: 18, fontFamily: F.display, color: C.accent, marginTop: 2 }}>{latestWeight} lbs</div>
+                    </div>
+                  )}
+                  {goalWeight && (
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em" }}>GOAL WT</div>
+                      <div style={{ fontSize: 18, fontFamily: F.display, color: C.accentBlue, marginTop: 2 }}>{goalWeight} lbs</div>
+                    </div>
+                  )}
+                </div>
+                {Object.keys(wb).length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700,
+                      letterSpacing: "0.12em", marginBottom: 8 }}>TODAY'S CHECK-IN</div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {[["energy","⚡"],["sleep","😴"],["soreness","💪"],["stress","🧠"]].map(([k, icon]) =>
+                        wb[k] ? (
+                          <div key={k} style={{ flex: 1, textAlign: "center", background: C.surface,
+                            borderRadius: 8, padding: "8px 4px" }}>
+                            <div style={{ fontSize: 16 }}>{icon}</div>
+                            <div style={{ fontSize: 16, fontFamily: F.display, color: C.accent }}>{wb[k]}</div>
+                            <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, letterSpacing: "0.1em" }}>
+                              {k.toUpperCase()}
+                            </div>
+                          </div>
+                        ) : null
+                      )}
+                    </div>
+                  </div>
+                )}
+                {goals.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700,
+                      letterSpacing: "0.12em", marginBottom: 6 }}>CLIENT GOALS</div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {goals.map((g, i) => (
+                        <span key={i} style={{ fontSize: 11, fontFamily: F.body, background: C.accentBlue + "20",
+                          color: C.accentBlue, border: `1px solid ${C.accentBlue}33`, borderRadius: 20, padding: "3px 10px" }}>
+                          {g.name}{g.deadline ? ` · ${new Date(g.deadline).toLocaleDateString("en-US", { month: "short", year: "numeric" })}` : ""}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {perfGoals.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700,
+                      letterSpacing: "0.12em", marginBottom: 6 }}>PERFORMANCE GOALS</div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {perfGoals.map((g, i) => (
+                        <span key={i} style={{ fontSize: 11, fontFamily: F.body, background: C.accent + "20",
+                          color: C.accent, border: `1px solid ${C.accent}33`, borderRadius: 20, padding: "3px 10px" }}>
+                          {g.exercise} → {g.goalWeight} lbs
+                          {g.deadline ? ` · ${new Date(g.deadline).toLocaleDateString("en-US", { month: "short", year: "numeric" })}` : ""}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {wl?.length > 0 && (
+                  <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+                    <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700,
+                      letterSpacing: "0.12em", marginBottom: 8 }}>WEIGHT LOG</div>
+                    <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+                      {wl.slice(0, 8).map((e, i) => (
+                        <div key={i} style={{ flexShrink: 0, textAlign: "center" }}>
+                          {e.photoUrls?.[0] && (
+                            <img src={e.photoUrls[0]} alt="" style={{ width: 44, height: 44,
+                              borderRadius: 8, objectFit: "cover", marginBottom: 4 }} />
+                          )}
+                          <div style={{ fontSize: 13, fontFamily: F.display, color: i === 0 ? C.accent : C.text }}>
+                            {e.weight} lbs
+                          </div>
+                          <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted }}>{e.date}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Exercise tracker */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={S.label}>EXERCISE PROGRESS TRACKER</label>
+            <select value={selectedExercise} onChange={e => setSelectedExercise(e.target.value)}
+              style={{ ...S.input, fontFamily: F.body }}>
+              <option value="">— Select an exercise to track —</option>
+              {allExercises.map(name => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </div>
+
+          {selectedExercise && exerciseHistory.length > 0 && (
+            <>
+              <div style={{ ...S.card, border: `1px solid ${C.accent}44`, marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.15em" }}>
+                      BEST — {selectedExercise.toUpperCase()}
+                    </div>
+                    <div style={{ fontSize: 56, fontFamily: F.display, color: C.accent, lineHeight: 1, marginTop: 4 }}>
+                      {maxWeight > 0 ? maxWeight : "–"}{" "}
+                      <span style={{ fontSize: 24, color: C.textMuted }}>LBS</span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted }}>SESSIONS</div>
+                    <div style={{ fontSize: 40, fontFamily: F.display, color: C.accentBlue }}>
+                      {exerciseHistory.length}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {exerciseHistory.slice(-8).map((entry, i, arr) => {
+                    const pct = maxWeight > 0 ? (entry.topWeight / maxWeight) * 100 : 0;
+                    const isLatest = i === arr.length - 1;
+                    return (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, minWidth: 55 }}>
+                          {entry.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </div>
+                        <div style={{ flex: 1, height: 6, background: C.surface, borderRadius: 3, overflow: "hidden" }}>
+                          <div style={{ height: "100%", borderRadius: 3,
+                            background: isLatest ? C.accent : C.accentBlue + "88",
+                            width: `${pct}%`, transition: "width 0.5s ease" }} />
+                        </div>
+                        <div style={{ fontSize: 13, fontFamily: F.display,
+                          color: isLatest ? C.accent : C.text, minWidth: 65, textAlign: "right" }}>
+                          {entry.topWeight > 0 ? `${entry.topWeight}lbs` : "–"}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted }}>SESSIONS</div>
-                <div style={{ fontSize: 40, fontFamily: F.display, color: C.accentBlue }}>{exerciseHistory.length}</div>
+
+              <div style={S.card}>
+                <div style={{ fontSize: 16, fontFamily: F.display, marginBottom: 12 }}>SESSION BREAKDOWN</div>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: F.body, fontSize: 12 }}>
+                  <thead>
+                    <tr>
+                      {["DATE","WORKOUT","TOP WEIGHT","REPS","SETS DONE",""].map(h => (
+                        <th key={h} style={{ textAlign: "left", color: C.textMuted, fontWeight: 700,
+                          letterSpacing: "0.1em", paddingBottom: 10, fontSize: 10,
+                          borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {exerciseHistory.slice().reverse().map((entry, i) => (
+                      <tr key={i} style={{ borderTop: `1px solid ${C.border}` }}>
+                        <td style={{ padding: "10px 0", color: C.textMuted }}>
+                          {entry.date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
+                        </td>
+                        <td style={{ padding: "10px 0", fontFamily: F.display, fontSize: 14 }}>{entry.workoutName}</td>
+                        <td style={{ padding: "10px 0", fontFamily: F.display, fontSize: 16,
+                          color: i === 0 ? C.accent : C.text }}>
+                          {entry.topWeight > 0 ? entry.topWeight : "–"}{" "}
+                          <span style={{ fontSize: 10, color: C.textMuted }}>lbs</span>
+                        </td>
+                        <td style={{ padding: "10px 0", color: C.textMuted }}>{entry.topReps || "–"}</td>
+                        <td style={{ padding: "10px 0", color: C.accentGreen }}>{entry.completedSets}</td>
+                        <td style={{ padding: "10px 0" }}>
+                          <button onClick={() => setDetailedLog(entry.logId)}
+                            style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 6,
+                              padding: "4px 10px", color: C.textMuted, cursor: "pointer",
+                              fontSize: 11, fontFamily: F.body }}>VIEW</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {exerciseHistory.slice(-8).map((entry, i, arr) => {
-                const pct = maxWeight > 0 ? (entry.topWeight / maxWeight) * 100 : 0;
-                const isLatest = i === arr.length - 1;
+            </>
+          )}
+
+          {/* All workouts list */}
+          {!selectedExercise && (
+            <>
+              <div style={{ fontSize: 18, fontFamily: F.display, marginBottom: 12 }}>ALL WORKOUTS</div>
+              {clientLogs.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "48px 0", color: C.textMuted,
+                  fontFamily: F.body, fontSize: 13 }}>No workout history yet</div>
+              ) : clientLogs.slice(0, 30).map((log, i) => {
+                const client = clients.find(c => c.userId === log.userId || c.id === log.userId);
                 return (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, minWidth: 55 }}>
-                      {entry.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  <div key={log.id || i} onClick={() => setDetailedLog(log.id)}
+                    style={{ ...S.card, cursor: "pointer", display: "flex",
+                      justifyContent: "space-between", alignItems: "center" }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = C.borderLight}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
+                  >
+                    <div>
+                      <div style={{ fontSize: 16, fontFamily: F.display }}>{log.workoutName}</div>
+                      <div style={{ fontSize: 11, fontFamily: F.body, color: C.accentBlue, marginTop: 1 }}>
+                        {client?.name || client?.email || "Unknown client"}
+                      </div>
+                      <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, marginTop: 1 }}>
+                        {fmtDate(log.completedAt)}
+                        {log.duration ? ` · ${Math.floor(log.duration / 60)}min` : ""}
+                        {log.exercises ? ` · ${log.exercises.length} exercises` : ""}
+                      </div>
                     </div>
-                    <div style={{ flex: 1, height: 6, background: C.surface, borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ height: "100%", borderRadius: 3, background: isLatest ? C.accent : C.accentBlue + "88", width: `${pct}%`, transition: "width 0.5s ease" }} />
-                    </div>
-                    <div style={{ fontSize: 13, fontFamily: F.display, color: isLatest ? C.accent : C.text, minWidth: 65, textAlign: "right" }}>
-                      {entry.topWeight > 0 ? `${entry.topWeight}lbs` : "–"}
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      {log.rating && (
+                        <div style={{ fontFamily: F.display, fontSize: 18, color: C.accent }}>{log.rating}★</div>
+                      )}
+                      <div style={{ color: C.textDim, fontSize: 20 }}>›</div>
                     </div>
                   </div>
                 );
               })}
-            </div>
-          </div>
-          <div style={S.card}>
-            <div style={{ fontSize: 16, fontFamily: F.display, marginBottom: 12 }}>SESSION BREAKDOWN</div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: F.body, fontSize: 12 }}>
-              <thead>
-                <tr>{["DATE", "WORKOUT", "TOP WEIGHT", "REPS", "SETS DONE", ""].map(h => <th key={h} style={{ textAlign: "left", color: C.textMuted, fontWeight: 700, letterSpacing: "0.1em", paddingBottom: 10, fontSize: 10, borderBottom: `1px solid ${C.border}` }}>{h}</th>)}</tr>
-              </thead>
-              <tbody>
-                {exerciseHistory.slice().reverse().map((entry, i) => (
-                  <tr key={i} style={{ borderTop: `1px solid ${C.border}` }}>
-                    <td style={{ padding: "10px 0", color: C.textMuted }}>{entry.date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}</td>
-                    <td style={{ padding: "10px 0", fontFamily: F.display, fontSize: 14 }}>{entry.workoutName}</td>
-                    <td style={{ padding: "10px 0", fontFamily: F.display, fontSize: 16, color: i === 0 ? C.accent : C.text }}>{entry.topWeight > 0 ? entry.topWeight : "–"} <span style={{ fontSize: 10, color: C.textMuted }}>lbs</span></td>
-                    <td style={{ padding: "10px 0", color: C.textMuted }}>{entry.topReps || "–"}</td>
-                    <td style={{ padding: "10px 0", color: C.accentGreen }}>{entry.completedSets}</td>
-                    <td style={{ padding: "10px 0" }}>
-                      <button onClick={() => setDetailedLog(entry.logId)} style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 10px", color: C.textMuted, cursor: "pointer", fontSize: 11, fontFamily: F.body }}>VIEW</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-
-      {!selectedExercise && (
-        <>
-          <div style={{ fontSize: 18, fontFamily: F.display, marginBottom: 12 }}>ALL WORKOUTS</div>
-          {clientLogs.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "48px 0", color: C.textMuted, fontFamily: F.body, fontSize: 13 }}>No workout history yet</div>
-          ) : clientLogs.slice(0, 30).map((log, i) => {
-            const client = clients.find(c => c.userId === log.userId || c.id === log.userId);
-            return (
-              <div key={log.id || i} onClick={() => setDetailedLog(log.id)}
-                style={{ ...S.card, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = C.borderLight}
-                onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
-              >
-                <div>
-                  <div style={{ fontSize: 16, fontFamily: F.display }}>{log.workoutName}</div>
-                  <div style={{ fontSize: 11, fontFamily: F.body, color: C.accentBlue, marginTop: 1 }}>{client?.name || client?.email || "Unknown client"}</div>
-                  <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, marginTop: 1 }}>
-                    {fmtDate(log.completedAt)}{log.duration ? ` · ${Math.floor(log.duration / 60)}min` : ""}{log.exercises ? ` · ${log.exercises.length} exercises` : ""}
-                  </div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  {log.rating && <div style={{ fontFamily: F.display, fontSize: 18, color: C.accent }}>{log.rating}★</div>}
-                  <div style={{ color: C.textDim, fontSize: 20 }}>›</div>
-                </div>
-              </div>
-            );
-          })}
+            </>
+          )}
         </>
       )}
     </div>
