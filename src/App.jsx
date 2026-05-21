@@ -236,7 +236,7 @@ function OverviewTab({ clients, workoutLogs, liveFeed, filterClientId, onFilterC
 }
 
 // ─── Clients Tab ──────────────────────────────────────────────────────────────
-function ClientsTab({ clients, workoutLogs, onAddClient, onSelectClient }) {
+function ClientsTab({ clients, workoutLogs, clientUserData={}, clientWeightLogs={}, onAddClient, onSelectClient }) {
   const [showAdd, setShowAdd] = useState(false);
   const [newClient, setNewClient] = useState({ name: "", email: "", program: "Rebuild Method" });
   const [saving, setSaving] = useState(false);
@@ -343,6 +343,43 @@ function ClientsTab({ clients, workoutLogs, onAddClient, onSelectClient }) {
                 {client.program && <span style={S.pill(C.textDim)}>{client.program}</span>}
               </div>
               {lastLog && <div style={{ fontSize: 10, fontFamily: F.body, color: C.textDim }}>Last workout: {fmtDate(lastLog.completedAt)}</div>}
+
+              {/* Live client data from app */}
+              {(() => {
+                const uid = client.userId;
+                const userData = uid ? clientUserData[uid] : null;
+                const wl = uid ? clientWeightLogs[uid] : null;
+                const latestWeight = wl?.[0]?.weight;
+                const goalWeight = userData?.profile?.goalWeight;
+                const todayKey = new Date().toISOString().slice(0, 10);
+                const wb = userData?.wellbeing?.[todayKey] || {};
+                const selectedGoals = (userData?.goals || []).filter(g => g.selected).slice(0, 2);
+                if (!userData && !latestWeight) return null;
+                return (
+                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                    {latestWeight && (
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.1em" }}>WEIGHT</span>
+                        <span style={{ fontSize: 13, fontFamily: F.display, color: C.accent }}>
+                          {latestWeight} lbs{goalWeight ? ` / ${goalWeight} goal` : ""}
+                        </span>
+                      </div>
+                    )}
+                    {Object.keys(wb).length > 0 && (
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {[["energy","⚡"],["sleep","😴"],["soreness","💪"],["stress","🧠"]].map(([k,i]) =>
+                          wb[k] ? <span key={k} style={{ fontSize: 10, fontFamily: F.body, background: C.surface, borderRadius: 6, padding: "2px 7px", color: C.textMuted }}>{i} {wb[k]}/5</span> : null
+                        )}
+                      </div>
+                    )}
+                    {selectedGoals.length > 0 && (
+                      <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted }}>
+                        🎯 {selectedGoals.map(g => g.name).join(" · ")}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Link section */}
               {!isLinked && (
@@ -494,7 +531,7 @@ function ProgramsTab({ clients }) {
 }
 
 // ─── Progress Tab ─────────────────────────────────────────────────────────────
-function ProgressTab({ clients, workoutLogs, selectedClientId, onSelectClient, viewLog, onViewLog }) {
+function ProgressTab({ clients, workoutLogs, clientUserData={}, clientWeightLogs={}, selectedClientId, onSelectClient, viewLog, onViewLog }) {
   const [selectedExercise, setSelectedExercise] = useState("");
   const [filterClient, setFilterClient] = useState(selectedClientId || "");
   const [detailedLog, setDetailedLog] = useState(viewLog || null);
@@ -586,11 +623,89 @@ function ProgressTab({ clients, workoutLogs, selectedClientId, onSelectClient, v
         </select>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 16 }}>
         <StatCard label="Total Sessions" value={clientLogs.length} color={C.accent} />
         <StatCard label="Exercises Tracked" value={allExercises.length} color={C.accentBlue} />
         <StatCard label="This Month" value={clientLogs.filter(l => { const d = l.completedAt?.toDate ? l.completedAt.toDate() : new Date(l.completedAt || 0); return (Date.now() - d.getTime()) < 30 * 24 * 60 * 60 * 1000; }).length} color={C.accentGreen} sub="workouts" />
       </div>
+
+      {/* Client app data panel — only shows when a specific client is selected */}
+      {filterClient && (() => {
+        const uid = clients.find(c => c.id === filterClient || c.userId === filterClient)?.userId;
+        const userData = uid ? clientUserData[uid] : null;
+        const wl = uid ? clientWeightLogs[uid] : null;
+        if (!userData && !wl?.length) return null;
+        const latestWeight = wl?.[0]?.weight;
+        const goalWeight = userData?.profile?.goalWeight;
+        const todayKey = new Date().toISOString().slice(0, 10);
+        const wb = userData?.wellbeing?.[todayKey] || {};
+        const goals = (userData?.goals || []).filter(g => g.selected);
+        const perfGoals = (userData?.perfGoals || []).filter(g => g.exercise);
+        const profile = userData?.profile || {};
+        return (
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "16px 20px", marginBottom: 20 }}>
+            <div style={{ fontSize: 14, fontFamily: F.display, letterSpacing: "0.08em", marginBottom: 14, color: C.textMuted }}>CLIENT DATA</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 14 }}>
+              {profile.height && <div style={{ textAlign: "center" }}><div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em" }}>HEIGHT</div><div style={{ fontSize: 18, fontFamily: F.display, color: C.text, marginTop: 2 }}>{profile.height}</div></div>}
+              {profile.age && <div style={{ textAlign: "center" }}><div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em" }}>AGE</div><div style={{ fontSize: 18, fontFamily: F.display, color: C.text, marginTop: 2 }}>{profile.age}</div></div>}
+              {latestWeight && <div style={{ textAlign: "center" }}><div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em" }}>WEIGHT</div><div style={{ fontSize: 18, fontFamily: F.display, color: C.accent, marginTop: 2 }}>{latestWeight} lbs</div></div>}
+              {goalWeight && <div style={{ textAlign: "center" }}><div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em" }}>GOAL WT</div><div style={{ fontSize: 18, fontFamily: F.display, color: C.accentBlue, marginTop: 2 }}>{goalWeight} lbs</div></div>}
+            </div>
+            {Object.keys(wb).length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em", marginBottom: 8 }}>TODAY'S CHECK-IN</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {[["energy","⚡"],["sleep","😴"],["soreness","💪"],["stress","🧠"]].map(([k,icon]) => wb[k] ? (
+                    <div key={k} style={{ flex: 1, textAlign: "center", background: C.surface, borderRadius: 8, padding: "8px 4px" }}>
+                      <div style={{ fontSize: 16 }}>{icon}</div>
+                      <div style={{ fontSize: 16, fontFamily: F.display, color: C.accent }}>{wb[k]}</div>
+                      <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, letterSpacing: "0.1em" }}>{k.toUpperCase()}</div>
+                    </div>
+                  ) : null)}
+                </div>
+              </div>
+            )}
+            {goals.length > 0 && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em", marginBottom: 6 }}>CLIENT GOALS</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {goals.map((g, i) => (
+                    <span key={i} style={{ fontSize: 11, fontFamily: F.body, background: C.accentBlue + "20", color: C.accentBlue, border: `1px solid ${C.accentBlue}33`, borderRadius: 20, padding: "3px 10px" }}>
+                      {g.name}{g.deadline ? ` · ${new Date(g.deadline).toLocaleDateString("en-US", { month: "short", year: "numeric" })}` : ""}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {perfGoals.length > 0 && (
+              <div>
+                <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em", marginBottom: 6 }}>PERFORMANCE GOALS</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {perfGoals.map((g, i) => (
+                    <span key={i} style={{ fontSize: 11, fontFamily: F.body, background: C.accent + "20", color: C.accent, border: `1px solid ${C.accent}33`, borderRadius: 20, padding: "3px 10px" }}>
+                      {g.exercise} → {g.goalWeight} lbs{g.deadline ? ` · ${new Date(g.deadline).toLocaleDateString("en-US", { month: "short", year: "numeric" })}` : ""}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {wl?.length > 0 && (
+              <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+                <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em", marginBottom: 8 }}>WEIGHT LOG</div>
+                <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+                  {wl.slice(0, 8).map((e, i) => (
+                    <div key={i} style={{ flexShrink: 0, textAlign: "center" }}>
+                      {e.photoUrls?.[0] && <img src={e.photoUrls[0]} alt="" style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover", marginBottom: 4 }} />}
+                      <div style={{ fontSize: 13, fontFamily: F.display, color: i === 0 ? C.accent : C.text }}>{e.weight} lbs</div>
+                      <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted }}>{e.date}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <div style={{ marginBottom: 20 }}>
         <label style={S.label}>EXERCISE PROGRESS TRACKER</label>
@@ -704,6 +819,8 @@ export default function App() {
   const [selectedClientId, setSelectedClientId] = useState(null);
   const [filterClientId, setFilterClientId] = useState(null);
   const [viewLog, setViewLog] = useState(null);
+  const [clientUserData, setClientUserData] = useState({}); // uid -> user doc data
+  const [clientWeightLogs, setClientWeightLogs] = useState({}); // uid -> weight entries
   const liveFeedUnsub = useRef(null);
 
   useEffect(() => {
@@ -711,29 +828,60 @@ export default function App() {
     return unsub;
   }, []);
 
+  // Keep loadData for manual refresh on client add
   const loadData = async () => {
     try {
       const clientSnap = await getDocs(collection(db, "clients"));
       setClients(clientSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      const logsQ = query(collection(db, "workoutLogs"), orderBy("completedAt", "desc"));
-      const logsSnap = await getDocs(logsQ);
-      setWorkoutLogs(logsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch (e) { console.error("Load error:", e); }
+    } catch (e) { console.error("loadData:", e); }
   };
 
-  const startLiveFeed = () => {
-    if (liveFeedUnsub.current) liveFeedUnsub.current();
-    const q = query(collection(db, "setSyncs"), orderBy("timestamp", "desc"));
-    liveFeedUnsub.current = onSnapshot(q, snap => {
-      setLiveFeed(snap.docs.slice(0, 30).map(d => ({ id: d.id, ...d.data() })));
-    });
-  };
+  const unsubCoachRefs = useRef([]);
+  const cleanupCoach = () => { unsubCoachRefs.current.forEach(u=>{try{u();}catch{}}); unsubCoachRefs.current=[]; };
 
   useEffect(() => {
-    if (!user) return;
-    loadData();
-    startLiveFeed();
-    return () => { if (liveFeedUnsub.current) liveFeedUnsub.current(); };
+    if (!user) { cleanupCoach(); return; }
+
+    // ── Clients — real-time ──────────────────────────────────────────────────
+    const unsubClients = onSnapshot(collection(db, "clients"), snap => {
+      const clientList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setClients(clientList);
+      // For each linked client, subscribe to their user doc + weight log
+      clientList.forEach(client => {
+        const uid = client.userId;
+        if (!uid) return;
+        // User doc (profile, goals, wellbeing)
+        const unsubUD = onSnapshot(doc(db, "users", uid), udSnap => {
+          if (!udSnap.exists()) return;
+          setClientUserData(prev => ({ ...prev, [uid]: udSnap.data() }));
+        }, () => {});
+        unsubCoachRefs.current.push(unsubUD);
+        // Weight log
+        const wlQ = query(collection(db, "weightLog"), where("userId", "==", uid), orderBy("updatedAt", "desc"));
+        const unsubWL = onSnapshot(wlQ, wlSnap => {
+          setClientWeightLogs(prev => ({ ...prev, [uid]: wlSnap.docs.map(d => ({ id: d.id, ...d.data() })) }));
+        }, () => {});
+        unsubCoachRefs.current.push(unsubWL);
+      });
+    }, err => console.warn("clients listener:", err));
+    unsubCoachRefs.current.push(unsubClients);
+
+    // ── Workout logs — real-time ─────────────────────────────────────────────
+    const logsQ = query(collection(db, "workoutLogs"), orderBy("completedAt", "desc"));
+    const unsubLogs = onSnapshot(logsQ, snap => {
+      setWorkoutLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, err => console.warn("logs listener:", err));
+    unsubCoachRefs.current.push(unsubLogs);
+
+    // ── Live set feed — real-time ────────────────────────────────────────────
+    if (liveFeedUnsub.current) liveFeedUnsub.current();
+    const feedQ = query(collection(db, "setSyncs"), orderBy("timestamp", "desc"));
+    liveFeedUnsub.current = onSnapshot(feedQ, snap => {
+      setLiveFeed(snap.docs.slice(0, 30).map(d => ({ id: d.id, ...d.data() })));
+    }, err => console.warn("feed listener:", err));
+    unsubCoachRefs.current.push(liveFeedUnsub.current);
+
+    return () => { cleanupCoach(); if(liveFeedUnsub.current) liveFeedUnsub.current(); };
   }, [user]);
 
   if (!authLoaded) return <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ fontSize: 36, fontFamily: F.display, color: C.accent, letterSpacing: "0.1em" }}>LOADING...</div></div>;
@@ -801,13 +949,16 @@ export default function App() {
         )}
         {tab === "clients" && (
           <ClientsTab
-            clients={clients} workoutLogs={workoutLogs} onAddClient={loadData}
+            clients={clients} workoutLogs={workoutLogs}
+            clientUserData={clientUserData} clientWeightLogs={clientWeightLogs}
+            onAddClient={loadData}
             onSelectClient={(client) => { setSelectedClientId(client.userId || client.id); setTab("progress"); }}
           />
         )}
         {tab === "progress" && (
           <ProgressTab
             clients={clients} workoutLogs={workoutLogs}
+            clientUserData={clientUserData} clientWeightLogs={clientWeightLogs}
             selectedClientId={selectedClientId} onSelectClient={setSelectedClientId}
             viewLog={viewLog} onViewLog={setViewLog}
           />
