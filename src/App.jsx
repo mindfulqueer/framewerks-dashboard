@@ -133,7 +133,7 @@ function StatCard({ label, value, color = C.text, sub }) {
 }
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
-function OverviewTab({ clients, workoutLogs, liveFeed, filterClientId, onFilterClient, onViewLog }) {
+function OverviewTab({ clients, workoutLogs, filterClientId, onFilterClient, onViewLog }) {
   const today = new Date().toISOString().slice(0, 10);
   const todayLogs = workoutLogs.filter(l => {
     const d = l.completedAt?.toDate ? l.completedAt.toDate() : new Date(l.completedAt || 0);
@@ -149,7 +149,6 @@ function OverviewTab({ clients, workoutLogs, liveFeed, filterClientId, onFilterC
     return c?.name || c?.email?.split("@")[0] || userId?.slice(0, 10) + "...";
   };
 
-  const filteredFeed = filterClientId ? liveFeed.filter(f => f.userId === filterClientId) : liveFeed;
   const filteredLogs = filterClientId ? workoutLogs.filter(l => l.userId === filterClientId) : workoutLogs;
 
   return (
@@ -169,43 +168,13 @@ function OverviewTab({ clients, workoutLogs, liveFeed, filterClientId, onFilterC
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 28 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 28 }}>
         <StatCard label="Total Clients" value={clients.length} color={C.accent} />
         <StatCard label="Today" value={todayLogs.length} color={C.accentBlue} sub="workouts completed" />
         <StatCard label="This Week" value={weekLogs.length} color={C.accentGreen} sub="total workouts" />
-        <StatCard label="Live Now" value={filteredFeed.length} color={filteredFeed.length > 0 ? C.accentRed : C.textDim} sub="active sets" />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-        {/* Live Feed */}
-        <div>
-          <div style={{ fontSize: 18, fontFamily: F.display, letterSpacing: "0.05em", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: filteredFeed.length > 0 ? C.accentRed : C.textDim, animation: filteredFeed.length > 0 ? "pulse 1.5s infinite" : "none" }} />
-            LIVE ACTIVITY
-          </div>
-          {filteredFeed.length === 0 ? (
-            <div style={{ ...S.card, textAlign: "center", padding: "32px 20px" }}>
-              <div style={{ fontSize: 28, marginBottom: 8 }}>😴</div>
-              <div style={{ fontSize: 16, fontFamily: F.display, color: C.textMuted }}>NO ACTIVE SESSIONS</div>
-            </div>
-          ) : filteredFeed.slice(0, 10).map((item, i) => (
-            <div key={item.id || i} style={{ ...S.card, borderLeft: `3px solid ${C.accentRed}`, marginBottom: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div>
-                  <div style={{ fontSize: 14, fontFamily: F.display, letterSpacing: "0.05em" }}>{item.exerciseName}</div>
-                  <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>
-                    Set {item.setNumber} · {item.reps || "–"} reps{item.weight ? ` · ${item.weight} lbs` : ""}
-                  </div>
-                  <div style={{ fontSize: 11, fontFamily: F.body, color: C.accentBlue, marginTop: 2 }}>
-                    {getClientName(item.userId)} · {item.workoutName}
-                  </div>
-                </div>
-                <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, whiteSpace: "nowrap" }}>{fmtTime(item.timestamp)}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-
+      <div>
         {/* Recent Workouts */}
         <div>
           <div style={{ fontSize: 18, fontFamily: F.display, letterSpacing: "0.05em", marginBottom: 12 }}>RECENT WORKOUTS</div>
@@ -985,6 +954,8 @@ function TrainerTab({ clients, workoutLogs }) {
   const [restTimeLeft, setRestTimeLeft] = useState(0);
   const [expandedEx, setExpandedEx] = useState(null);
   const [sessionSaved, setSessionSaved] = useState(false);
+  const [exerciseNotes, setExerciseNotes] = useState({});
+  const [customRestTimes, setCustomRestTimes] = useState({});
   const [now, setNow] = useState(Date.now());
   const restInterval = useRef(null);
   const tickRef = useRef(null);
@@ -999,7 +970,7 @@ function TrainerTab({ clients, workoutLogs }) {
   // Elapsed time ticker
   useEffect(() => {
     if (sessionActive) {
-      tickRef.current = setInterval(() => setNow(Date.now()), 30000);
+      tickRef.current = setInterval(() => setNow(Date.now()), 1000);
       return () => clearInterval(tickRef.current);
     }
   }, [sessionActive]);
@@ -1106,6 +1077,8 @@ function TrainerTab({ clients, workoutLogs }) {
   const completedSetsCount = Object.values(sessionLog).reduce((a, ex) => a + ex.sets.filter(s => s.completed).length, 0);
   const totalSetsCount = Object.values(sessionLog).reduce((a, ex) => a + ex.sets.length, 0);
   const elapsedMin = sessionStartTime ? Math.floor((now - sessionStartTime) / 60000) : 0;
+  const elapsedSec = sessionStartTime ? Math.floor((now - sessionStartTime) / 1000) : 0;
+  const elapsedDisplay = `${Math.floor(elapsedSec / 60)}:${String(elapsedSec % 60).padStart(2, '0')}`;
 
   const saveSession = async () => {
     if (!selectedClient || !clientProgram) return;
@@ -1117,10 +1090,12 @@ function TrainerTab({ clients, workoutLogs }) {
         const key = `${bi}-${ei}`;
         const exLog = sessionLog[key];
         if (exLog) {
+          const noteKey = `${bi}-${ei}`;
           exercises.push({
             name: ex.name,
             blockLabel: block.label || String.fromCharCode(65 + bi),
             sets: exLog.sets,
+            notes: exerciseNotes[noteKey] || "",
           });
         }
       });
@@ -1223,7 +1198,7 @@ function TrainerTab({ clients, workoutLogs }) {
             <span style={{ fontSize: 24, fontFamily: F.display }}>{(selectedClient.name || "").toUpperCase()}</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 20, fontFamily: F.body, fontSize: 12, color: C.textMuted }}>
-            <span>⏱ {elapsedMin} MIN</span>
+            <span style={{ fontSize: 28, fontFamily: F.display, color: C.text, letterSpacing: "0.05em" }}>⏱ {elapsedDisplay}</span>
             <span style={{ color: C.accent, fontFamily: F.display, fontSize: 18 }}>{completedSetsCount}/{totalSetsCount} <span style={{ fontSize: 10, color: C.textMuted }}>SETS</span></span>
           </div>
         </div>
@@ -1239,6 +1214,19 @@ function TrainerTab({ clients, workoutLogs }) {
               <span style={{ fontSize: 32, fontFamily: F.display, color: restTimeLeft <= 10 ? C.accentRed : C.text }}>{fmtTimer(restTimeLeft)}</span>
               <button onClick={() => { clearInterval(restInterval.current); setRestTimer(null); setRestTimeLeft(0); }} style={{ ...S.btn("ghost"), fontSize: 11, padding: "4px 10px" }}>✕</button>
             </div>
+          </div>
+        )}
+        {!restTimer && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: F.display, fontSize: 12, color: C.textMuted, letterSpacing: "0.1em" }}>QUICK REST:</span>
+            {[30, 60, 90, 120].map(sec => (
+              <button key={sec} onClick={() => startRest(sec)} style={{ ...S.btn("ghost"), fontSize: 12, padding: "6px 12px" }}>{sec}s</button>
+            ))}
+            <input
+              type="number" placeholder="Custom" min="5" max="600"
+              style={{ ...S.input, width: 90, padding: "6px 10px", fontSize: 12, fontFamily: F.body }}
+              onKeyDown={e => { if (e.key === "Enter" && e.target.value) { const v = parseInt(e.target.value); if (v > 0) startRest(v); e.target.value = ""; } }}
+            />
           </div>
         )}
 
@@ -1266,7 +1254,7 @@ function TrainerTab({ clients, workoutLogs }) {
                         {allDone ? "✓" : `${String.fromCharCode(65 + bi)}${ei + 1}`}
                       </div>
                       <div>
-                        <div style={{ fontSize: 16, fontFamily: F.display, letterSpacing: "0.03em" }}>{(ex.name || "UNNAMED").toUpperCase()}</div>
+                        <div style={{ fontSize: 18, fontFamily: F.display, letterSpacing: "0.03em", fontWeight: 700 }}>{(ex.name || "UNNAMED").toUpperCase()}</div>
                         <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>
                           {exLog.sets.filter(s => s.completed).length}/{exLog.sets.length} sets{lastWeight ? ` · Last: ${lastWeight} lbs` : ""}
                         </div>
@@ -1285,7 +1273,18 @@ function TrainerTab({ clients, workoutLogs }) {
                       )}
                       {/* Prescribed */}
                       <div style={{ fontSize: 10, fontFamily: F.body, color: C.textDim, marginBottom: 8, letterSpacing: "0.1em" }}>
-                        PRESCRIBED: {Array.isArray(ex.sets) ? ex.sets.map(s => `${s.reps || "?"}${s.weight ? " × " + s.weight : ""}`).join(" | ") : `${ex.sets || 3} sets`}
+                        PRESCRIBED: {Array.isArray(ex.sets) ? ex.sets.map((s, si) => {
+                          const parts = [`${s.reps || "?"}${s.weight ? " \u00d7 " + s.weight : ""}`];
+                          if (s.tempo) parts.push("Tempo: " + s.tempo);
+                          if (s.rpe) parts.push("RPE: " + s.rpe);
+                          if (s.rir) parts.push("RIR: " + s.rir);
+                          if (s.rest) parts.push("Rest: " + s.rest + "s");
+                          if (s.notes) parts.push(s.notes);
+                          return parts.join(" \u00b7 ");
+                        }).join(" | ") : `${ex.sets || 3} sets`}
+                        {ex.tempo && <span> \u00b7 Tempo: {ex.tempo}</span>}
+                        {ex.rpe && <span> \u00b7 RPE: {ex.rpe}</span>}
+                        {ex.rir && <span> \u00b7 RIR: {ex.rir}</span>}
                       </div>
                       {/* Set Grid */}
                       <div style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr 44px 44px", gap: "6px 8px", alignItems: "center", fontSize: 12, fontFamily: F.body, marginBottom: 10 }}>
@@ -1310,7 +1309,7 @@ function TrainerTab({ clients, workoutLogs }) {
                               </button>
                             </div>
                             <div style={{ textAlign: "center" }}>
-                              <button onClick={() => startRest(ex.rest || 60)}
+                              <button onClick={() => startRest(customRestTimes[key] || ex.rest || 60)}
                                 style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 8px", cursor: "pointer", color: C.textMuted, fontSize: 11, fontFamily: F.display }}>
                                 ⏱
                               </button>
@@ -1319,6 +1318,26 @@ function TrainerTab({ clients, workoutLogs }) {
                         ))}
                       </div>
                       <button onClick={() => addSet(key)} style={{ ...S.btn("ghost"), fontSize: 11, padding: "4px 10px" }}>+ ADD SET</button>
+                      {/* Custom Rest Time Per Exercise */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                        <span style={{ fontSize: 10, fontFamily: F.body, color: C.textDim, letterSpacing: "0.1em" }}>REST:</span>
+                        <input type="number" placeholder={String(ex.rest || 60)} min="5" max="600"
+                          value={customRestTimes[key] || ""}
+                          onChange={e => setCustomRestTimes(prev => ({ ...prev, [key]: parseInt(e.target.value) || 0 }))}
+                          style={{ ...S.input, width: 80, padding: "6px 10px", fontSize: 12, fontFamily: F.body }}
+                        />
+                        <span style={{ fontSize: 10, fontFamily: F.body, color: C.textDim }}>sec</span>
+                      </div>
+                      {/* Coach Session Notes */}
+                      <div style={{ marginTop: 10 }}>
+                        <textarea
+                          placeholder="Session notes for this exercise..."
+                          value={exerciseNotes[key] || ""}
+                          onChange={e => setExerciseNotes(prev => ({ ...prev, [key]: e.target.value }))}
+                          rows={2}
+                          style={{ ...S.input, width: "100%", padding: "8px 10px", fontSize: 12, fontFamily: F.body, resize: "vertical", minHeight: 40, lineHeight: 1.4 }}
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1341,7 +1360,7 @@ function TrainerTab({ clients, workoutLogs }) {
             <div style={{ width: "100%", textAlign: "center", padding: 24 }}>
               <div style={{ fontSize: 36, fontFamily: F.display, color: C.accentGreen, marginBottom: 8 }}>SESSION SAVED ✓</div>
               <div style={{ fontFamily: F.body, fontSize: 13, color: C.textMuted, marginBottom: 20 }}>
-                {completedSetsCount} sets logged for {selectedClient.name} · {elapsedMin} min
+                {completedSetsCount} sets logged for {selectedClient.name} · {elapsedDisplay}
               </div>
               <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
                 <button onClick={() => { setSessionActive(false); setSessionLog({}); setSessionSaved(false); }}
@@ -1398,7 +1417,15 @@ function TrainerTab({ clients, workoutLogs }) {
                     <div>
                       <div style={{ fontSize: 16, fontFamily: F.display }}>{(ex.name || "UNNAMED").toUpperCase()}</div>
                       <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>
-                        {Array.isArray(ex.sets) ? ex.sets.map(s => `${s.reps || "?"}${s.weight ? " × " + s.weight : ""}`).join(" | ") : `${ex.sets || 3} sets`}
+                        {Array.isArray(ex.sets) ? ex.sets.map(s => {
+                          const parts = [`${s.reps || "?"}${s.weight ? " \u00d7 " + s.weight : ""}`];
+                          if (s.tempo) parts.push("Tempo: " + s.tempo);
+                          if (s.rpe) parts.push("RPE: " + s.rpe);
+                          if (s.rir) parts.push("RIR: " + s.rir);
+                          return parts.join(" \u00b7 ");
+                        }).join(" | ") : `${ex.sets || 3} sets`}
+                        {ex.tempo && <span style={{ color: C.accentBlue, marginLeft: 8 }}>Tempo: {ex.tempo}</span>}
+                        {ex.rpe && <span style={{ color: C.accentOrange || "#FF8C00", marginLeft: 8 }}>RPE: {ex.rpe}</span>}
                         {lastWeight && <span style={{ color: C.accent, marginLeft: 8 }}>Last: {lastWeight} lbs</span>}
                       </div>
                     </div>
@@ -1428,14 +1455,12 @@ export default function App() {
   const [tab, setTab] = useState("overview");
   const [clients, setClients] = useState([]);
   const [workoutLogs, setWorkoutLogs] = useState([]);
-  const [liveFeed, setLiveFeed] = useState([]);
   const [selectedClientId, setSelectedClientId] = useState(null);
   const [filterClientId, setFilterClientId] = useState(null);
   const [viewLog, setViewLog] = useState(null);
   const [clientUserData, setClientUserData] = useState({}); // uid -> user doc data
   const [clientWeightLogs, setClientWeightLogs] = useState({}); // uid -> weight entries
   const [clientCheckIns, setClientCheckIns] = useState({}); // uid -> { date -> checkin }
-  const liveFeedUnsub = useRef(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, u => { setUser(u); setAuthLoaded(true); });
@@ -1495,15 +1520,7 @@ export default function App() {
     }, err => console.warn("logs listener:", err));
     unsubCoachRefs.current.push(unsubLogs);
 
-    // ── Live set feed — real-time ────────────────────────────────────────────
-    if (liveFeedUnsub.current) liveFeedUnsub.current();
-    const feedQ = query(collection(db, "setSyncs"), orderBy("timestamp", "desc"));
-    liveFeedUnsub.current = onSnapshot(feedQ, snap => {
-      setLiveFeed(snap.docs.slice(0, 30).map(d => ({ id: d.id, ...d.data() })));
-    }, err => console.warn("feed listener:", err));
-    unsubCoachRefs.current.push(liveFeedUnsub.current);
-
-    return () => { cleanupCoach(); if(liveFeedUnsub.current) liveFeedUnsub.current(); };
+    return () => { cleanupCoach(); };
   }, [user]);
 
   if (!authLoaded) return <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ fontSize: 36, fontFamily: F.display, color: C.accent, letterSpacing: "0.1em" }}>LOADING...</div></div>;
@@ -1550,12 +1567,6 @@ export default function App() {
             }}>{item.label}</button>
           ))}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: 20 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: liveFeed.length > 0 ? C.accentRed : C.textDim, animation: liveFeed.length > 0 ? "pulse 1.5s infinite" : "none" }} />
-          <span style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, letterSpacing: "0.1em" }}>
-            {liveFeed.length > 0 ? `${liveFeed.length} LIVE` : "NO ACTIVITY"}
-          </span>
-        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {user.photoURL && <img src={user.photoURL} alt="" style={{ width: 30, height: 30, borderRadius: "50%", border: `1px solid ${C.border}` }} />}
           <button onClick={() => signOut(auth)} style={{ ...S.btn("dim"), fontSize: 11, padding: "6px 12px" }}>SIGN OUT</button>
@@ -1565,7 +1576,7 @@ export default function App() {
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 32px 60px" }}>
         {tab === "overview" && (
           <OverviewTab
-            clients={clients} workoutLogs={workoutLogs} liveFeed={liveFeed}
+            clients={clients} workoutLogs={workoutLogs}
             filterClientId={filterClientId} onFilterClient={setFilterClientId}
             onViewLog={(log) => { setViewLog(log.id); setTab("progress"); }}
           />
