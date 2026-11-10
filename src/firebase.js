@@ -80,6 +80,11 @@ export async function loadClientWorkoutLogs(userId) {
   }
 }
 
+// ─── Save Workout Log (coach logging on behalf of client) ───────
+export async function saveWorkoutLog(log) {
+  await setDoc(doc(db, "workoutLogs", log.id), log);
+}
+
 // ─── Client Data (for coach view) ───────────────────────────────
 // Coach can see habit completions and wellbeing from the user profile directly
 // since client data now saves to the user profile via merge
