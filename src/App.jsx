@@ -1057,7 +1057,8 @@ function TrainerTab({ clients, workoutLogs }) {
     (day.blocks || []).forEach((block, bi) => {
       (block.exercises || []).forEach((ex, ei) => {
         const key = `${bi}-${ei}`;
-        const numSets = (ex.sets && ex.sets.length > 0) ? ex.sets.length : 3;
+        const setsArr = Array.isArray(ex.sets) ? ex.sets : [];
+        const numSets = setsArr.length > 0 ? setsArr.length : (typeof ex.sets === "number" ? ex.sets : 3);
         log[key] = {
           sets: Array.from({ length: numSets }, () => ({ weight: "", reps: "", completed: false })),
         };
@@ -1284,7 +1285,7 @@ function TrainerTab({ clients, workoutLogs }) {
                       )}
                       {/* Prescribed */}
                       <div style={{ fontSize: 10, fontFamily: F.body, color: C.textDim, marginBottom: 8, letterSpacing: "0.1em" }}>
-                        PRESCRIBED: {(ex.sets || []).map(s => `${s.reps || "?"}${s.weight ? " × " + s.weight : ""}`).join(" | ")}
+                        PRESCRIBED: {Array.isArray(ex.sets) ? ex.sets.map(s => `${s.reps || "?"}${s.weight ? " × " + s.weight : ""}`).join(" | ") : `${ex.sets || 3} sets`}
                       </div>
                       {/* Set Grid */}
                       <div style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr 44px 44px", gap: "6px 8px", alignItems: "center", fontSize: 12, fontFamily: F.body, marginBottom: 10 }}>
@@ -1297,10 +1298,10 @@ function TrainerTab({ clients, workoutLogs }) {
                           <React.Fragment key={si}>
                             <div style={{ fontSize: 14, fontFamily: F.display, color: s.completed ? C.accentGreen : C.textMuted }}>{si + 1}</div>
                             <input value={s.weight} onChange={e => updateSetField(key, si, "weight", e.target.value)}
-                              placeholder={ex.sets?.[si]?.weight || "lbs"}
+                              placeholder={Array.isArray(ex.sets) && ex.sets[si]?.weight || "lbs"}
                               style={{ ...S.input, padding: "8px 10px", fontSize: 14, fontFamily: F.display, background: C.surface }} />
                             <input value={s.reps} onChange={e => updateSetField(key, si, "reps", e.target.value)}
-                              placeholder={ex.sets?.[si]?.reps || "reps"}
+                              placeholder={Array.isArray(ex.sets) && ex.sets[si]?.reps || "reps"}
                               style={{ ...S.input, padding: "8px 10px", fontSize: 14, fontFamily: F.display, background: C.surface }} />
                             <div style={{ textAlign: "center" }}>
                               <button onClick={() => toggleSet(key, si)}
@@ -1397,7 +1398,7 @@ function TrainerTab({ clients, workoutLogs }) {
                     <div>
                       <div style={{ fontSize: 16, fontFamily: F.display }}>{(ex.name || "UNNAMED").toUpperCase()}</div>
                       <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>
-                        {(ex.sets || []).map(s => `${s.reps || "?"}${s.weight ? " × " + s.weight : ""}`).join(" | ")}
+                        {Array.isArray(ex.sets) ? ex.sets.map(s => `${s.reps || "?"}${s.weight ? " × " + s.weight : ""}`).join(" | ") : `${ex.sets || 3} sets`}
                         {lastWeight && <span style={{ color: C.accent, marginLeft: 8 }}>Last: {lastWeight} lbs</span>}
                       </div>
                     </div>
