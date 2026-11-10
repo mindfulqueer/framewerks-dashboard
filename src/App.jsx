@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import ProgramDesigner from "./ProgramDesigner";
+import { ProgramEditor, ProgramCalendar, ClientAnalytics, HabitAssignment, PerfGoalAssignment, WorkoutSummaryEditor } from "./CoachFeatures";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
   getFirestore, collection, query, where, orderBy, getDocs,
-  onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, setDoc
+  onSnapshot, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, setDoc, getDoc
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import {
   getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut
@@ -10,12 +12,12 @@ import {
 
 // ─── Firebase ────────────────────────────────────────────────────────────────
 const firebaseConfig = {
-  apiKey: "AIzaSyDumer7KJOVMOf85aoEP1cam4kpLKs5kiQ",
-  authDomain: "framewerks-dashboard.firebaseapp.com",
-  projectId: "framewerks-dashboard",
-  storageBucket: "framewerks-dashboard.firebasestorage.app",
-  messagingSenderId: "878987259944",
-  appId: "1:878987259944:web:38bc7c9e3e5e28d2877c9b"
+  apiKey: "AIzaSyDwCIb6OQ40TDNlNr1TjxO4kZVf2Ho62X8",
+  authDomain: "framewerks-coach.firebaseapp.com",
+  projectId: "framewerks-coach",
+  storageBucket: "framewerks-coach.firebasestorage.app",
+  messagingSenderId: "850336233136",
+  appId: "1:850336233136:web:2bf59afb82672435c4ed75"
 };
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -24,51 +26,30 @@ const provider = new GoogleAuthProvider();
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
-  bg: "#0A0A0A",
-  surface: "#111111",
-  card: "#161616",
-  cardHover: "#1C1C1C",
-  border: "#252525",
-  borderLight: "#2E2E2E",
-  accent: "#E8FF00",
-  accentRed: "#FF3D3D",
-  accentBlue: "#00C8FF",
-  accentGreen: "#00FF88",
-  text: "#FFFFFF",
-  textMuted: "#777777",
-  textDim: "#444444",
+  bg: "#0A0A0A", surface: "#111111", card: "#161616", border: "#252525",
+  borderLight: "#2E2E2E", accent: "#E8FF00", accentRed: "#FF3D3D",
+  accentBlue: "#00C8FF", accentGreen: "#00FF88", accentOrange: "#FF8C00",
+  text: "#FFFFFF", textMuted: "#777777", textDim: "#444444",
 };
-
-const F = {
-  display: "'Bebas Neue', 'Impact', sans-serif",
-  body: "system-ui, -apple-system, sans-serif",
-};
+const F = { display: "'Bebas Neue', 'Impact', sans-serif", body: "system-ui, -apple-system, sans-serif" };
 
 // ─── Shared Styles ────────────────────────────────────────────────────────────
 const S = {
-  card: {
-    background: C.card,
-    border: `1px solid ${C.border}`,
-    borderRadius: 10,
-    padding: "16px 20px",
-    marginBottom: 10,
-  },
+  card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 20px", marginBottom: 10 },
   pill: (color = C.accent) => ({
-    display: "inline-flex", alignItems: "center",
-    padding: "3px 10px", borderRadius: 20,
-    fontSize: 10, fontFamily: F.body, fontWeight: 700,
-    letterSpacing: "0.12em", textTransform: "uppercase",
+    display: "inline-flex", alignItems: "center", padding: "3px 10px", borderRadius: 20,
+    fontSize: 10, fontFamily: F.body, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase",
     background: color + "20", color, border: `1px solid ${color}33`,
   }),
   btn: (v = "primary") => ({
     display: "inline-flex", alignItems: "center", justifyContent: "center",
     gap: 8, padding: "10px 20px", borderRadius: 8, border: "none",
-    cursor: "pointer", fontFamily: F.display, letterSpacing: "0.08em",
-    fontSize: 15, transition: "all 0.15s",
+    cursor: "pointer", fontFamily: F.display, letterSpacing: "0.08em", fontSize: 15, transition: "all 0.15s",
     ...(v === "primary" ? { background: C.accent, color: "#000" }
       : v === "danger" ? { background: C.accentRed, color: "#fff" }
       : v === "ghost" ? { background: "transparent", color: C.text, border: `1px solid ${C.border}` }
       : v === "dim" ? { background: "transparent", color: C.textMuted, border: `1px solid ${C.border}` }
+      : v === "blue" ? { background: C.accentBlue + "22", color: C.accentBlue, border: `1px solid ${C.accentBlue}44` }
       : {}),
   }),
   input: {
@@ -77,13 +58,30 @@ const S = {
     fontSize: 14, fontFamily: F.body, outline: "none", boxSizing: "border-box",
   },
   label: {
-    fontSize: 10, fontFamily: F.body, color: C.textMuted,
-    fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase",
-    marginBottom: 6, display: "block",
+    fontSize: 10, fontFamily: F.body, color: C.textMuted, fontWeight: 700,
+    letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 6, display: "block",
   },
   sectionTitle: { fontSize: 32, fontFamily: F.display, letterSpacing: "0.05em", lineHeight: 1 },
   sectionSub: { fontSize: 11, fontFamily: F.body, color: C.textMuted, letterSpacing: "0.08em", marginTop: 4 },
 };
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const fmtDate = (ts) => {
+  if (!ts) return "–";
+  const d = ts?.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+};
+const fmtTime = (ts) => {
+  if (!ts) return "";
+  const d = ts?.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+const fmtDateTime = (ts) => {
+  if (!ts) return "–";
+  const d = ts?.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+};
+const getBlockLabel = (blockIndex, exerciseIndex) => `${String.fromCharCode(65 + blockIndex)}${exerciseIndex + 1}`;
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 function LoginScreen() {
@@ -96,14 +94,8 @@ function LoginScreen() {
   };
   return (
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", fontFamily: F.display }}>
-      {/* Left panel */}
-      <div style={{
-        width: 420, background: C.surface, borderRight: `1px solid ${C.border}`,
-        display: "flex", flexDirection: "column", justifyContent: "center", padding: "60px 48px"
-      }}>
-        <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, letterSpacing: "0.3em", marginBottom: 12 }}>
-          FRAMEWERKS
-        </div>
+      <div style={{ width: 420, background: C.surface, borderRight: `1px solid ${C.border}`, display: "flex", flexDirection: "column", justifyContent: "center", padding: "60px 48px" }}>
+        <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, letterSpacing: "0.3em", marginBottom: 12 }}>FRAMEWERKS</div>
         <div style={{ fontSize: 72, color: C.accent, lineHeight: 0.9, marginBottom: 8 }}>
           COACH<br /><span style={{ color: C.text }}>DASH</span><span style={{ color: C.accentRed }}>.</span>
         </div>
@@ -111,29 +103,19 @@ function LoginScreen() {
           Real-time client progress. Live workout feeds. Complete training history. All in one place.
         </div>
         <div style={{ marginTop: 40 }}>
-          {err && (
-            <div style={{ background: C.accentRed + "22", border: `1px solid ${C.accentRed}44`, borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 12, fontFamily: F.body, color: C.accentRed }}>
-              {err}
-            </div>
-          )}
+          {err && <div style={{ background: C.accentRed + "22", border: `1px solid ${C.accentRed}44`, borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 12, fontFamily: F.body, color: C.accentRed }}>{err}</div>}
           <button onClick={login} disabled={loading} style={{ ...S.btn("primary"), width: "100%", fontSize: 20, padding: "16px 24px", opacity: loading ? 0.6 : 1 }}>
             {loading ? "SIGNING IN..." : "SIGN IN WITH GOOGLE"}
           </button>
-          <p style={{ fontSize: 11, fontFamily: F.body, color: C.textDim, marginTop: 12, textAlign: "center" }}>
-            Coach accounts only — contact Framewerks for access
-          </p>
         </div>
       </div>
-      {/* Right decorative panel */}
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", inset: 0, display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gridTemplateRows: "repeat(6, 1fr)", gap: 1 }}>
           {Array(48).fill(0).map((_, i) => (
             <div key={i} style={{ background: i % 7 === 0 ? C.accent + "08" : i % 5 === 0 ? C.accentRed + "05" : C.surface, borderRadius: 4 }} />
           ))}
         </div>
-        <div style={{ textAlign: "center", zIndex: 1 }}>
-          <div style={{ fontSize: 140, lineHeight: 1, color: C.accent + "10", fontFamily: F.display }}>FW</div>
-        </div>
+        <div style={{ fontSize: 140, lineHeight: 1, color: C.accent + "10", fontFamily: F.display, zIndex: 1 }}>FW</div>
       </div>
     </div>
   );
@@ -151,86 +133,99 @@ function StatCard({ label, value, color = C.text, sub }) {
 }
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
-function OverviewTab({ clients, workoutLogs, liveFeed, onSelectClient }) {
+function OverviewTab({ clients, workoutLogs, liveFeed, filterClientId, onFilterClient, onViewLog }) {
   const today = new Date().toISOString().slice(0, 10);
   const todayLogs = workoutLogs.filter(l => {
     const d = l.completedAt?.toDate ? l.completedAt.toDate() : new Date(l.completedAt || 0);
     return d.toISOString().slice(0, 10) === today;
   });
-
   const weekLogs = workoutLogs.filter(l => {
     const d = l.completedAt?.toDate ? l.completedAt.toDate() : new Date(l.completedAt || 0);
     return (Date.now() - d.getTime()) < 7 * 24 * 60 * 60 * 1000;
   });
 
+  const getClientName = (userId) => {
+    const c = clients.find(c => c.userId === userId || c.id === userId);
+    return c?.name || c?.email?.split("@")[0] || userId?.slice(0, 10) + "...";
+  };
+
+  const filteredFeed = filterClientId ? liveFeed.filter(f => f.userId === filterClientId) : liveFeed;
+  const filteredLogs = filterClientId ? workoutLogs.filter(l => l.userId === filterClientId) : workoutLogs;
+
   return (
     <div>
-      <div style={{ marginBottom: 28 }}>
-        <div style={S.sectionTitle}>OVERVIEW</div>
-        <div style={S.sectionSub}>
-          {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).toUpperCase()}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
+        <div>
+          <div style={S.sectionTitle}>OVERVIEW</div>
+          <div style={S.sectionSub}>{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }).toUpperCase()}</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <label style={{ ...S.label, marginBottom: 0 }}>FILTER:</label>
+          <select value={filterClientId || ""} onChange={e => onFilterClient(e.target.value || null)}
+            style={{ ...S.input, width: "auto", minWidth: 180, fontSize: 13 }}>
+            <option value="">All Clients</option>
+            {clients.map(c => <option key={c.id} value={c.userId || c.id}>{c.name || c.email}</option>)}
+          </select>
         </div>
       </div>
 
-      {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 28 }}>
         <StatCard label="Total Clients" value={clients.length} color={C.accent} />
         <StatCard label="Today" value={todayLogs.length} color={C.accentBlue} sub="workouts completed" />
         <StatCard label="This Week" value={weekLogs.length} color={C.accentGreen} sub="total workouts" />
-        <StatCard label="Live Now" value={liveFeed.length} color={liveFeed.length > 0 ? C.accentRed : C.textDim} sub="active sets" />
+        <StatCard label="Live Now" value={filteredFeed.length} color={filteredFeed.length > 0 ? C.accentRed : C.textDim} sub="active sets" />
       </div>
 
-      {/* Live Feed */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+        {/* Live Feed */}
         <div>
           <div style={{ fontSize: 18, fontFamily: F.display, letterSpacing: "0.05em", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: liveFeed.length > 0 ? C.accentRed : C.textDim, animation: liveFeed.length > 0 ? "pulse 1.5s infinite" : "none" }} />
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: filteredFeed.length > 0 ? C.accentRed : C.textDim, animation: filteredFeed.length > 0 ? "pulse 1.5s infinite" : "none" }} />
             LIVE ACTIVITY
           </div>
-          {liveFeed.length === 0 ? (
+          {filteredFeed.length === 0 ? (
             <div style={{ ...S.card, textAlign: "center", padding: "32px 20px" }}>
               <div style={{ fontSize: 28, marginBottom: 8 }}>😴</div>
               <div style={{ fontSize: 16, fontFamily: F.display, color: C.textMuted }}>NO ACTIVE SESSIONS</div>
             </div>
-          ) : (
-            liveFeed.slice(0, 8).map((item, i) => (
-              <div key={item.id || i} style={{ ...S.card, borderLeft: `3px solid ${C.accentRed}` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontFamily: F.display, letterSpacing: "0.05em" }}>{item.exerciseName}</div>
-                    <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>
-                      Set {item.setNumber} · {item.reps || "–"} reps · {item.weight ? `${item.weight} lbs` : "bodyweight"}
-                    </div>
-                    <div style={{ fontSize: 10, fontFamily: F.body, color: C.textDim, marginTop: 2 }}>{item.userId?.slice(0, 12)}...</div>
+          ) : filteredFeed.slice(0, 10).map((item, i) => (
+            <div key={item.id || i} style={{ ...S.card, borderLeft: `3px solid ${C.accentRed}`, marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontSize: 14, fontFamily: F.display, letterSpacing: "0.05em" }}>{item.exerciseName}</div>
+                  <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>
+                    Set {item.setNumber} · {item.reps || "–"} reps{item.weight ? ` · ${item.weight} lbs` : ""}
                   </div>
-                  <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted }}>
-                    {item.timestamp?.toDate ? item.timestamp.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Just now"}
+                  <div style={{ fontSize: 11, fontFamily: F.body, color: C.accentBlue, marginTop: 2 }}>
+                    {getClientName(item.userId)} · {item.workoutName}
                   </div>
                 </div>
+                <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, whiteSpace: "nowrap" }}>{fmtTime(item.timestamp)}</div>
               </div>
-            ))
-          )}
+            </div>
+          ))}
         </div>
 
         {/* Recent Workouts */}
         <div>
           <div style={{ fontSize: 18, fontFamily: F.display, letterSpacing: "0.05em", marginBottom: 12 }}>RECENT WORKOUTS</div>
-          {workoutLogs.slice(0, 8).map((log, i) => (
-            <div key={log.id || i} style={{ ...S.card, cursor: "pointer" }} onClick={() => onSelectClient(log.userId)}>
+          {filteredLogs.slice(0, 10).map((log, i) => (
+            <div key={log.id || i} onClick={() => onViewLog(log)}
+              style={{ ...S.card, cursor: "pointer", marginBottom: 8 }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = C.borderLight}
+              onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
+            >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <div style={{ fontSize: 14, fontFamily: F.display, letterSpacing: "0.03em" }}>{log.workoutName}</div>
-                  <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>
-                    {log.userId?.slice(0, 16)}...
+                  <div style={{ fontSize: 15, fontFamily: F.display }}>{log.workoutName}</div>
+                  <div style={{ fontSize: 11, fontFamily: F.body, color: C.accentBlue, marginTop: 1 }}>{getClientName(log.userId)}</div>
+                  <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, marginTop: 1 }}>
+                    {fmtDateTime(log.completedAt)}{log.duration ? ` · ${Math.floor(log.duration / 60)}min` : ""}
                   </div>
                 </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted }}>
-                    {log.completedAt?.toDate
-                      ? log.completedAt.toDate().toLocaleDateString()
-                      : log.completedAt ? new Date(log.completedAt).toLocaleDateString() : "–"}
-                  </div>
-                  {log.rating && <div style={{ fontSize: 14, fontFamily: F.display, color: C.accent }}>{log.rating}★</div>}
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {log.rating && <div style={{ fontFamily: F.display, fontSize: 18, color: C.accent }}>{log.rating}★</div>}
+                  <div style={{ color: C.textDim, fontSize: 20 }}>›</div>
                 </div>
               </div>
             </div>
@@ -242,20 +237,19 @@ function OverviewTab({ clients, workoutLogs, liveFeed, onSelectClient }) {
 }
 
 // ─── Clients Tab ──────────────────────────────────────────────────────────────
-function ClientsTab({ clients, workoutLogs, selectedClientId, onSelectClient, onAddClient }) {
+function ClientsTab({ clients, workoutLogs, clientUserData={}, clientWeightLogs={}, onAddClient, onSelectClient }) {
   const [showAdd, setShowAdd] = useState(false);
   const [newClient, setNewClient] = useState({ name: "", email: "", program: "Rebuild Method" });
   const [saving, setSaving] = useState(false);
+  const [linkEmail, setLinkEmail] = useState({});
+  const [linking, setLinking] = useState({});
+  const [linkMsg, setLinkMsg] = useState({});
 
   const handleAdd = async () => {
     if (!newClient.name || !newClient.email) return;
     setSaving(true);
     try {
-      await addDoc(collection(db, "clients"), {
-        ...newClient,
-        createdAt: serverTimestamp(),
-        active: true,
-      });
+      await addDoc(collection(db, "clients"), { ...newClient, createdAt: serverTimestamp(), active: true });
       setNewClient({ name: "", email: "", program: "Rebuild Method" });
       setShowAdd(false);
       onAddClient();
@@ -263,8 +257,28 @@ function ClientsTab({ clients, workoutLogs, selectedClientId, onSelectClient, on
     setSaving(false);
   };
 
-  const getClientLogs = (clientId) =>
-    workoutLogs.filter(l => l.userId === clientId);
+  const handleLink = async (clientId) => {
+    const email = linkEmail[clientId];
+    if (!email) return;
+    setLinking({ ...linking, [clientId]: true });
+    try {
+      const q = query(collection(db, "workoutLogs"), where("userEmail", "==", email));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const userId = snap.docs[0].data().userId;
+        await updateDoc(doc(db, "clients", clientId), { userId, linkedEmail: email });
+        setLinkMsg({ ...linkMsg, [clientId]: "✓ Linked successfully!" });
+        onAddClient();
+      } else {
+        await updateDoc(doc(db, "clients", clientId), { linkedEmail: email, pendingLink: true });
+        setLinkMsg({ ...linkMsg, [clientId]: "Email saved — will link when client logs their first workout." });
+        onAddClient();
+      }
+    } catch (e) { console.error(e); }
+    setLinking({ ...linking, [clientId]: false });
+  };
+
+  const getClientLogs = (client) => workoutLogs.filter(l => l.userId === client.userId || l.userId === client.id);
 
   return (
     <div>
@@ -273,16 +287,13 @@ function ClientsTab({ clients, workoutLogs, selectedClientId, onSelectClient, on
           <div style={S.sectionTitle}>CLIENTS</div>
           <div style={S.sectionSub}>{clients.length} ATHLETES ENROLLED</div>
         </div>
-        <button onClick={() => setShowAdd(!showAdd)} style={{ ...S.btn("primary"), fontSize: 14 }}>
-          + ADD CLIENT
-        </button>
+        <button onClick={() => setShowAdd(!showAdd)} style={{ ...S.btn("primary"), fontSize: 14 }}>+ ADD CLIENT</button>
       </div>
 
-      {/* Add client form */}
       {showAdd && (
         <div style={{ ...S.card, border: `1px solid ${C.accent}44`, marginBottom: 20 }}>
           <div style={{ fontSize: 18, fontFamily: F.display, marginBottom: 16 }}>NEW CLIENT</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
             <div>
               <label style={S.label}>NAME</label>
               <input value={newClient.name} onChange={e => setNewClient({ ...newClient, name: e.target.value })} placeholder="John Doe" style={S.input} />
@@ -291,14 +302,14 @@ function ClientsTab({ clients, workoutLogs, selectedClientId, onSelectClient, on
               <label style={S.label}>EMAIL</label>
               <input value={newClient.email} onChange={e => setNewClient({ ...newClient, email: e.target.value })} placeholder="john@email.com" style={S.input} />
             </div>
-          </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={S.label}>PROGRAM</label>
-            <select value={newClient.program} onChange={e => setNewClient({ ...newClient, program: e.target.value })} style={{ ...S.input, fontFamily: F.body }}>
-              <option>Rebuild Method</option>
-              <option>Strength Foundation</option>
-              <option>Custom Program</option>
-            </select>
+            <div>
+              <label style={S.label}>PROGRAM</label>
+              <select value={newClient.program} onChange={e => setNewClient({ ...newClient, program: e.target.value })} style={{ ...S.input, fontFamily: F.body }}>
+                <option>Rebuild Method</option>
+                <option>Strength Foundation</option>
+                <option>Custom Program</option>
+              </select>
+            </div>
           </div>
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={() => setShowAdd(false)} style={{ ...S.btn("ghost"), flex: 1 }}>CANCEL</button>
@@ -309,51 +320,205 @@ function ClientsTab({ clients, workoutLogs, selectedClientId, onSelectClient, on
         </div>
       )}
 
-      {/* Client list */}
-      {clients.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "60px 0", color: C.textMuted }}>
-          <div style={{ fontSize: 48, fontFamily: F.display, marginBottom: 8 }}>0</div>
-          <div style={{ fontFamily: F.body, fontSize: 13 }}>No clients yet. Add your first athlete.</div>
-        </div>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-          {clients.map(client => {
-            const logs = getClientLogs(client.id);
-            const lastLog = logs[0];
-            const isSelected = selectedClientId === client.id;
-            return (
-              <div key={client.id}
-                onClick={() => onSelectClient(client.id)}
-                style={{
-                  background: isSelected ? C.accent + "0A" : C.card,
-                  border: `1px solid ${isSelected ? C.accent : C.border}`,
-                  borderRadius: 10, padding: "20px",
-                  cursor: "pointer", transition: "all 0.15s",
-                }}>
-                <div style={{
-                  width: 44, height: 44, borderRadius: "50%",
-                  background: isSelected ? C.accent : C.surface,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 18, fontFamily: F.display, color: isSelected ? "#000" : C.textMuted,
-                  marginBottom: 12,
-                }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+        {clients.map(client => {
+          const logs = getClientLogs(client);
+          const lastLog = logs[0];
+          const isLinked = !!client.userId;
+          return (
+            <div key={client.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px", display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 44, height: 44, borderRadius: "50%", background: isLinked ? C.accent : C.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontFamily: F.display, color: isLinked ? "#000" : C.textMuted, flexShrink: 0 }}>
                   {(client.name || client.email || "?")[0].toUpperCase()}
                 </div>
-                <div style={{ fontSize: 18, fontFamily: F.display, letterSpacing: "0.03em" }}>
-                  {client.name || client.email?.split("@")[0]}
-                </div>
-                <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>{client.email}</div>
-                <div style={{ marginTop: 12, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <span style={S.pill(C.accentBlue)}>{logs.length} sessions</span>
-                  {client.program && <span style={S.pill(C.textMuted)}>{client.program}</span>}
-                </div>
-                {lastLog && (
-                  <div style={{ fontSize: 10, fontFamily: F.body, color: C.textDim, marginTop: 8 }}>
-                    Last: {lastLog.completedAt?.toDate
-                      ? lastLog.completedAt.toDate().toLocaleDateString()
-                      : lastLog.completedAt ? new Date(lastLog.completedAt).toLocaleDateString() : "–"}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 18, fontFamily: F.display, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {client.name || client.email?.split("@")[0]}
                   </div>
-                )}
+                  <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{client.email}</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <span style={S.pill(isLinked ? C.accentGreen : C.textDim)}>{isLinked ? "✓ LINKED" : "NOT LINKED"}</span>
+                <span style={S.pill(C.accentBlue)}>{logs.length} sessions</span>
+                {client.program && <span style={S.pill(C.textDim)}>{client.program}</span>}
+              </div>
+              {lastLog && <div style={{ fontSize: 10, fontFamily: F.body, color: C.textDim }}>Last workout: {fmtDate(lastLog.completedAt)}</div>}
+
+              {/* Live client data from app */}
+              {(() => {
+                const uid = client.userId;
+                const userData = uid ? clientUserData[uid] : null;
+                const wl = uid ? clientWeightLogs[uid] : null;
+                const latestWeight = wl?.[0]?.weight;
+                const goalWeight = userData?.profile?.goalWeight;
+                const todayKey = new Date().toISOString().slice(0, 10);
+                const wb = userData?.wellbeing?.[todayKey] || {};
+                const selectedGoals = (userData?.goals || []).filter(g => g.selected).slice(0, 2);
+                if (!userData && !latestWeight) return null;
+                return (
+                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                    {latestWeight && (
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.1em" }}>WEIGHT</span>
+                        <span style={{ fontSize: 13, fontFamily: F.display, color: C.accent }}>
+                          {latestWeight} lbs{goalWeight ? ` / ${goalWeight} goal` : ""}
+                        </span>
+                      </div>
+                    )}
+                    {Object.keys(wb).length > 0 && (
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {[["energy","⚡"],["sleep","😴"],["soreness","💪"],["stress","🧠"]].map(([k,i]) =>
+                          wb[k] ? <span key={k} style={{ fontSize: 10, fontFamily: F.body, background: C.surface, borderRadius: 6, padding: "2px 7px", color: C.textMuted }}>{i} {wb[k]}/5</span> : null
+                        )}
+                      </div>
+                    )}
+                    {selectedGoals.length > 0 && (
+                      <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted }}>
+                        🎯 {selectedGoals.map(g => g.name).join(" · ")}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Link section */}
+              {!isLinked && (
+                <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+                  <label style={S.label}>LINK CLIENT APP ACCOUNT</label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      placeholder="Client's Google email"
+                      value={linkEmail[client.id] || ""}
+                      onChange={e => setLinkEmail({ ...linkEmail, [client.id]: e.target.value })}
+                      style={{ ...S.input, flex: 1, padding: "8px 10px", fontSize: 12 }}
+                    />
+                    <button onClick={() => handleLink(client.id)} disabled={linking[client.id]}
+                      style={{ ...S.btn("blue"), padding: "8px 12px", fontSize: 12, flexShrink: 0 }}>
+                      LINK
+                    </button>
+                  </div>
+                  {linkMsg[client.id] && (
+                    <div style={{ fontSize: 11, fontFamily: F.body, color: C.accentGreen, marginTop: 6 }}>{linkMsg[client.id]}</div>
+                  )}
+                </div>
+              )}
+
+              <button onClick={() => onSelectClient(client)} style={{ ...S.btn("ghost"), width: "100%", fontSize: 12, padding: "8px", marginTop: "auto" }}>
+                VIEW PROGRESS
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Programs Tab ─────────────────────────────────────────────────────────────
+function ProgramsTab({ clients }) {
+  const [view,            setView]           = useState("list");
+  const [programs,        setPrograms]        = useState([]);
+  const [selectedProgram, setSelectedProgram] = useState(null);
+  const [loading,         setLoading]         = useState(true);
+  const [showSummaryEditor, setShowSummaryEditor] = useState(false);
+
+  const loadPrograms = async () => {
+    setLoading(true);
+    try {
+      const snap = await getDocs(collection(db, "programs"));
+      setPrograms(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadPrograms(); }, []);
+
+  // Duplicate program
+  const duplicateProgram = async (prog) => {
+    try {
+      const { id, ...data } = prog;
+      await addDoc(collection(db, "programs"), {
+        ...data,
+        name: `${prog.name} (Copy)`,
+        assignedClientId: null,
+        createdAt: serverTimestamp(),
+      });
+      loadPrograms();
+    } catch(e) { console.error(e); }
+  };
+
+  // Delete program
+  const deleteProgram = async (progId) => {
+    if(!window.confirm("Delete this program?")) return;
+    try {
+      await deleteDoc(doc(db, "programs", progId));
+      loadPrograms();
+    } catch(e) { console.error(e); }
+  };
+
+  if (view === "designer") return <ProgramDesigner clients={clients} onBack={() => { setView("list"); loadPrograms(); }} />;
+
+  if (view === "editor" && selectedProgram) return (
+    <ProgramEditor
+      program={selectedProgram}
+      clients={clients}
+      onBack={() => { setView("list"); loadPrograms(); }}
+      onSaved={(updated) => { setSelectedProgram(updated); loadPrograms(); }}
+    />
+  );
+
+  if (view === "summaries" && selectedProgram) return (
+    <div>
+      <button onClick={() => setView("list")} style={{ ...S.btn("dim"), fontSize: 12, padding: "6px 12px", marginBottom: 20 }}>← BACK</button>
+      <WorkoutSummaryEditor program={selectedProgram} clients={clients} onClose={() => setView("list")} />
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
+        <div>
+          <div style={S.sectionTitle}>PROGRAMS</div>
+          <div style={S.sectionSub}>{programs.length} PROGRAMS CREATED</div>
+        </div>
+        <button onClick={() => setView("designer")} style={{ ...S.btn("primary"), fontSize: 14 }}>+ NEW PROGRAM</button>
+      </div>
+      {loading ? (
+        <div style={{ textAlign: "center", padding: "60px 0", color: C.textMuted, fontFamily: F.display }}>LOADING...</div>
+      ) : programs.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "60px 0" }}>
+          <div style={{ fontSize: 48, fontFamily: F.display, color: C.textDim, marginBottom: 12 }}>0</div>
+          <div style={{ fontFamily: F.body, color: C.textMuted, fontSize: 13 }}>No programs yet. Click New Program to build one.</div>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+          {programs.map(program => {
+            const assignedClient = clients.find(c => c.id === program.assignedClientId);
+            const totalExercises = (program.days||[]).reduce((s,d)=>s+(d.blocks||[]).reduce((s2,b)=>s2+(b.exercises?.length||0),0),0)
+              || (program.blocks||[]).reduce((s,b)=>s+(b.exercises?.length||0),0);
+            return (
+              <div key={program.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "20px", display: "flex", flexDirection: "column", gap: 10 }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = C.accent + "44"}
+                onMouseLeave={e => e.currentTarget.style.borderColor = C.border}>
+                <div style={{ fontSize: 22, fontFamily: F.display }}>{program.name}</div>
+                <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted }}>
+                  {program.weeks} weeks · {(program.days||program.blocks||[]).length} {program.days?"days":"blocks"} · {totalExercises} exercises
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {assignedClient && <span style={S.pill(C.accentGreen)}>{assignedClient.name || assignedClient.email}</span>}
+                </div>
+                {/* Action buttons */}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: "auto", paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
+                  <button onClick={() => { setSelectedProgram(program); setView("editor"); }}
+                    style={{ ...S.btn("primary"), fontSize: 12, padding: "6px 12px", flex: 1 }}>EDIT</button>
+                  <button onClick={() => { setSelectedProgram(program); setView("summaries"); }}
+                    style={{ ...S.btn("blue"), fontSize: 12, padding: "6px 12px", flex: 1 }}>SUMMARIES</button>
+                  <button onClick={() => duplicateProgram(program)}
+                    style={{ ...S.btn("ghost"), fontSize: 12, padding: "6px 12px", flex: 1 }}>DUPLICATE</button>
+                  <button onClick={() => deleteProgram(program.id)}
+                    style={{ ...S.btn("danger"), fontSize: 12, padding: "6px 10px" }}>✕</button>
+                </div>
               </div>
             );
           })}
@@ -363,58 +528,72 @@ function ClientsTab({ clients, workoutLogs, selectedClientId, onSelectClient, on
   );
 }
 
-// ─── Progress Tab (per client) ────────────────────────────────────────────────
-function ProgressTab({ clients, workoutLogs, selectedClientId, onSelectClient }) {
+// ─── Progress Tab ─────────────────────────────────────────────────────────────
+function ProgressTab({ clients, workoutLogs, clientUserData={}, clientWeightLogs={}, selectedClientId, onSelectClient, viewLog, onViewLog }) {
   const [selectedExercise, setSelectedExercise] = useState("");
-  const [detailedLog, setDetailedLog] = useState(null);
+  const [filterClient,     setFilterClient]     = useState(selectedClientId || "");
+  const [detailedLog,      setDetailedLog]      = useState(viewLog || null);
+  const [progressSubTab,   setProgressSubTab]   = useState("analytics");
 
-  const clientLogs = selectedClientId
-    ? workoutLogs.filter(l => l.userId === selectedClientId)
+  useEffect(() => { if (viewLog) setDetailedLog(viewLog); }, [viewLog]);
+  useEffect(() => { if (selectedClientId) setFilterClient(selectedClientId); }, [selectedClientId]);
+
+  const resolveUserId = (val) => {
+    if (!val) return null;
+    const c = clients.find(c => c.id === val || c.userId === val);
+    return c?.userId || val;
+  };
+
+  const clientLogs = filterClient
+    ? workoutLogs.filter(l => l.userId === resolveUserId(filterClient))
     : workoutLogs;
 
-  const selectedClient = clients.find(c => c.id === selectedClientId);
-
-  const allExercises = [...new Set(
-    clientLogs.flatMap(log => log.exercises?.map(ex => ex.name) || [])
-  )];
+  const selectedClient = clients.find(c => c.id === filterClient || c.userId === filterClient);
+  const allExercises   = [...new Set(clientLogs.flatMap(l => l.exercises?.map(e => e.name) || []))];
 
   const exerciseHistory = clientLogs
-    .filter(log => log.exercises?.some(ex => ex.name === selectedExercise))
-    .map(log => {
-      const ex = log.exercises.find(e => e.name === selectedExercise);
-      const completedSets = ex?.sets?.filter(s => s.completed) || [];
-      const topSet = completedSets.reduce((best, s) => {
-        const w = parseFloat(s.weight) || 0;
-        return w > (parseFloat(best?.weight) || 0) ? s : best;
-      }, null);
+    .filter(l => l.exercises?.some(e => e.name === selectedExercise))
+    .map(l => {
+      const ex = l.exercises.find(e => e.name === selectedExercise);
+      const done = ex?.sets?.filter(s => s.completed) || [];
+      const top  = done.reduce((b, s) => parseFloat(s.weight || 0) > parseFloat(b?.weight || 0) ? s : b, null);
       return {
-        logId: log.id,
-        date: log.completedAt?.toDate
-          ? log.completedAt.toDate()
-          : log.completedAt ? new Date(log.completedAt) : new Date(),
-        workoutName: log.workoutName,
-        topWeight: parseFloat(topSet?.weight) || 0,
-        topReps: topSet?.reps || 0,
-        allSets: ex?.sets || [],
-        completedSets: completedSets.length,
+        logId: l.id,
+        date: l.completedAt?.toDate ? l.completedAt.toDate() : new Date(l.completedAt || 0),
+        workoutName: l.workoutName,
+        topWeight: parseFloat(top?.weight) || 0,
+        topReps: top?.reps || 0,
+        completedSets: done.length,
       };
     })
     .sort((a, b) => a.date - b.date);
 
   const maxWeight = exerciseHistory.length > 0 ? Math.max(...exerciseHistory.map(d => d.topWeight)) : 0;
 
+  // ── Detailed log view ──
   if (detailedLog) {
-    const log = workoutLogs.find(l => l.id === detailedLog);
+    const log    = workoutLogs.find(l => l.id === detailedLog);
     if (!log) { setDetailedLog(null); return null; }
+    const client = clients.find(c => c.userId === log.userId || c.id === log.userId);
     return (
       <div>
-        <button onClick={() => setDetailedLog(null)} style={{ ...S.btn("ghost"), marginBottom: 20, fontSize: 13 }}>← BACK</button>
-        <div style={{ fontSize: 28, fontFamily: F.display, marginBottom: 4 }}>{log.workoutName}</div>
-        <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginBottom: 16 }}>
-          {log.completedAt?.toDate
-            ? log.completedAt.toDate().toLocaleString()
-            : log.completedAt ? new Date(log.completedAt).toLocaleString() : "–"}
-          {log.duration ? ` · ${Math.floor(log.duration / 60)} min` : ""}
+        <button onClick={() => { setDetailedLog(null); onViewLog(null); }}
+          style={{ ...S.btn("ghost"), marginBottom: 20, fontSize: 13 }}>← BACK</button>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: 32, fontFamily: F.display }}>{log.workoutName}</div>
+            <div style={{ fontSize: 12, fontFamily: F.body, color: C.accentBlue, marginTop: 2 }}>
+              {client?.name || client?.email || log.userId?.slice(0, 20)}
+            </div>
+            <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>
+              {fmtDateTime(log.completedAt)}{log.duration ? ` · ${Math.floor(log.duration / 60)} min` : ""}
+            </div>
+          </div>
+          {log.rating && (
+            <div style={{ fontSize: 48, fontFamily: F.display, color: C.accent }}>
+              {log.rating}<span style={{ fontSize: 20, color: C.textMuted }}>★</span>
+            </div>
+          )}
         </div>
         {log.notes && (
           <div style={{ ...S.card, fontFamily: F.body, fontSize: 13, color: C.textMuted, fontStyle: "italic", marginBottom: 16 }}>
@@ -423,24 +602,27 @@ function ProgressTab({ clients, workoutLogs, selectedClientId, onSelectClient })
         )}
         {log.exercises?.map((ex, i) => (
           <div key={i} style={S.card}>
-            <div style={{ fontSize: 18, fontFamily: F.display, marginBottom: 12 }}>{ex.name}</div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: F.body, fontSize: 12 }}>
+            <div style={{ fontSize: 20, fontFamily: F.display, marginBottom: 12 }}>{ex.name}</div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: F.body, fontSize: 13 }}>
               <thead>
                 <tr>
-                  {["SET", "WEIGHT", "REPS", "DONE"].map(h => (
-                    <th key={h} style={{ textAlign: "left", color: C.textMuted, fontWeight: 700, letterSpacing: "0.1em", paddingBottom: 8, fontSize: 10 }}>{h}</th>
+                  {["SET","WEIGHT","REPS","STATUS"].map(h => (
+                    <th key={h} style={{ textAlign: "left", color: C.textMuted, fontWeight: 700,
+                      letterSpacing: "0.1em", paddingBottom: 8, fontSize: 10 }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {ex.sets?.map((s, si) => (
                   <tr key={si} style={{ borderTop: `1px solid ${C.border}` }}>
-                    <td style={{ padding: "8px 0", fontFamily: F.display, fontSize: 16 }}>{s.setNumber}</td>
-                    <td style={{ padding: "8px 0", color: s.completed ? C.text : C.textMuted }}>{s.weight ? `${s.weight} lbs` : "–"}</td>
+                    <td style={{ padding: "8px 0", fontFamily: F.display, fontSize: 18 }}>{s.setNumber}</td>
+                    <td style={{ padding: "8px 0", color: s.completed ? C.text : C.textMuted }}>
+                      {s.weight ? `${s.weight} lbs` : "–"}
+                    </td>
                     <td style={{ padding: "8px 0", color: s.completed ? C.text : C.textMuted }}>{s.reps || "–"}</td>
                     <td style={{ padding: "8px 0" }}>
-                      <span style={{ color: s.completed ? C.accentGreen : C.textDim, fontSize: 14 }}>
-                        {s.completed ? "✓" : "–"}
+                      <span style={{ color: s.completed ? C.accentGreen : C.textDim }}>
+                        {s.completed ? "✓ Done" : "–"}
                       </span>
                     </td>
                   </tr>
@@ -453,220 +635,786 @@ function ProgressTab({ clients, workoutLogs, selectedClientId, onSelectClient })
     );
   }
 
+  // ── Main progress view ──
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 20 }}>
+      {/* Header + client selector */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 }}>
         <div>
           <div style={S.sectionTitle}>PROGRESS</div>
           <div style={S.sectionSub}>
             {selectedClient ? (selectedClient.name || selectedClient.email)?.toUpperCase() : "ALL CLIENTS"}
           </div>
         </div>
-        <select
-          value={selectedClientId || ""}
-          onChange={e => onSelectClient(e.target.value || null)}
-          style={{ ...S.input, width: "auto", minWidth: 180, fontFamily: F.body, fontSize: 13 }}
-        >
+        <select value={filterClient}
+          onChange={e => { setFilterClient(e.target.value); onSelectClient(e.target.value || null); }}
+          style={{ ...S.input, width: "auto", minWidth: 200, fontFamily: F.body, fontSize: 13 }}>
           <option value="">All Clients</option>
           {clients.map(c => (
-            <option key={c.id} value={c.id}>{c.name || c.email}</option>
+            <option key={c.id} value={c.userId || c.id}>{c.name || c.email}</option>
           ))}
         </select>
       </div>
 
-      {/* Summary stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 24 }}>
-        <StatCard label="Total Sessions" value={clientLogs.length} color={C.accent} />
-        <StatCard label="Exercises Tracked" value={allExercises.length} color={C.accentBlue} />
-        <StatCard label="This Month" value={clientLogs.filter(l => {
-          const d = l.completedAt?.toDate ? l.completedAt.toDate() : new Date(l.completedAt || 0);
-          return (Date.now() - d.getTime()) < 30 * 24 * 60 * 60 * 1000;
-        }).length} color={C.accentGreen} sub="workouts" />
-      </div>
+      {/* Sub-tabs — only when a client is selected */}
+      {filterClient && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+          {[["analytics","📈 ANALYTICS"],["habits","🔥 HABITS"],["perf","🎯 GOALS"],["history","📋 HISTORY"]].map(([id, label]) => (
+            <button key={id} onClick={() => setProgressSubTab(id)}
+              style={{ ...S.btn(progressSubTab === id ? "primary" : "ghost"), fontSize: 12, padding: "7px 14px" }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* Exercise deep dive */}
-      <div style={{ marginBottom: 20 }}>
-        <label style={S.label}>EXERCISE PROGRESS TRACKER</label>
-        <select
-          value={selectedExercise}
-          onChange={e => setSelectedExercise(e.target.value)}
-          style={{ ...S.input, fontFamily: F.body }}
-        >
-          <option value="">— Select an exercise —</option>
-          {allExercises.map(name => <option key={name} value={name}>{name}</option>)}
-        </select>
-      </div>
+      {/* Analytics */}
+      {filterClient && progressSubTab === "analytics" && (() => {
+        const client = clients.find(c => c.id === filterClient || c.userId === filterClient);
+        if (!client) return null;
+        return (
+          <ClientAnalytics
+            client={client}
+            workoutLogs={workoutLogs}
+            weightLog={clientWeightLogs[client.userId] || []}
+            userData={clientUserData[client.userId]}
+          />
+        );
+      })()}
 
-      {selectedExercise && exerciseHistory.length > 0 && (
+      {/* Habits */}
+      {filterClient && progressSubTab === "habits" && (() => {
+        const client = clients.find(c => c.id === filterClient || c.userId === filterClient);
+        if (!client) return null;
+        return <HabitAssignment client={client} clientUserData={clientUserData} onClose={null} />;
+      })()}
+
+      {/* Perf goals */}
+      {filterClient && progressSubTab === "perf" && (() => {
+        const client = clients.find(c => c.id === filterClient || c.userId === filterClient);
+        if (!client) return null;
+        return (
+          <PerfGoalAssignment
+            client={client}
+            workoutLogs={workoutLogs}
+            clientUserData={clientUserData}
+            onClose={null}
+          />
+        );
+      })()}
+
+      {/* History / exercise tracker — default view or explicit history tab */}
+      {(!filterClient || progressSubTab === "history") && (
         <>
-          {/* Best weight visual */}
-          <div style={{ ...S.card, border: `1px solid ${C.accent}44`, marginBottom: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 }}>
-              <div>
-                <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.15em" }}>BEST SET — {selectedExercise.toUpperCase()}</div>
-                <div style={{ fontSize: 56, fontFamily: F.display, color: C.accent, lineHeight: 1, marginTop: 4 }}>
-                  {maxWeight > 0 ? maxWeight : "–"} <span style={{ fontSize: 24, color: C.textMuted }}>LBS</span>
+          {/* Stats row */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 20 }}>
+            <StatCard label="Total Sessions" value={clientLogs.length} color={C.accent} />
+            <StatCard label="Exercises Tracked" value={allExercises.length} color={C.accentBlue} />
+            <StatCard label="This Month" value={clientLogs.filter(l => {
+              const d = l.completedAt?.toDate ? l.completedAt.toDate() : new Date(l.completedAt || 0);
+              return (Date.now() - d.getTime()) < 30 * 24 * 60 * 60 * 1000;
+            }).length} color={C.accentGreen} sub="workouts" />
+          </div>
+
+          {/* Client data panel */}
+          {filterClient && (() => {
+            const uid      = resolveUserId(filterClient);
+            const userData = uid ? clientUserData[uid] : null;
+            const wl       = uid ? clientWeightLogs[uid] : null;
+            if (!userData && !wl?.length) return null;
+            const latestWeight = wl?.[0]?.weight;
+            const goalWeight   = userData?.profile?.goalWeight;
+            const todayKey     = new Date().toISOString().slice(0, 10);
+            const wb           = userData?.wellbeing?.[todayKey] || {};
+            const goals        = (userData?.goals || []).filter(g => g.selected);
+            const perfGoals    = (userData?.perfGoals || []).filter(g => g.exercise);
+            const profile      = userData?.profile || {};
+            return (
+              <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
+                padding: "16px 20px", marginBottom: 20 }}>
+                <div style={{ fontSize: 14, fontFamily: F.display, letterSpacing: "0.08em",
+                  marginBottom: 14, color: C.textMuted }}>CLIENT DATA</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 14 }}>
+                  {profile.height && (
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em" }}>HEIGHT</div>
+                      <div style={{ fontSize: 18, fontFamily: F.display, color: C.text, marginTop: 2 }}>{profile.height}</div>
+                    </div>
+                  )}
+                  {profile.age && (
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em" }}>AGE</div>
+                      <div style={{ fontSize: 18, fontFamily: F.display, color: C.text, marginTop: 2 }}>{profile.age}</div>
+                    </div>
+                  )}
+                  {latestWeight && (
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em" }}>WEIGHT</div>
+                      <div style={{ fontSize: 18, fontFamily: F.display, color: C.accent, marginTop: 2 }}>{latestWeight} lbs</div>
+                    </div>
+                  )}
+                  {goalWeight && (
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.12em" }}>GOAL WT</div>
+                      <div style={{ fontSize: 18, fontFamily: F.display, color: C.accentBlue, marginTop: 2 }}>{goalWeight} lbs</div>
+                    </div>
+                  )}
+                </div>
+                {Object.keys(wb).length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700,
+                      letterSpacing: "0.12em", marginBottom: 8 }}>TODAY'S CHECK-IN</div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {[["energy","⚡"],["sleep","😴"],["soreness","💪"],["stress","🧠"]].map(([k, icon]) =>
+                        wb[k] ? (
+                          <div key={k} style={{ flex: 1, textAlign: "center", background: C.surface,
+                            borderRadius: 8, padding: "8px 4px" }}>
+                            <div style={{ fontSize: 16 }}>{icon}</div>
+                            <div style={{ fontSize: 16, fontFamily: F.display, color: C.accent }}>{wb[k]}</div>
+                            <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, letterSpacing: "0.1em" }}>
+                              {k.toUpperCase()}
+                            </div>
+                          </div>
+                        ) : null
+                      )}
+                    </div>
+                  </div>
+                )}
+                {goals.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700,
+                      letterSpacing: "0.12em", marginBottom: 6 }}>CLIENT GOALS</div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {goals.map((g, i) => (
+                        <span key={i} style={{ fontSize: 11, fontFamily: F.body, background: C.accentBlue + "20",
+                          color: C.accentBlue, border: `1px solid ${C.accentBlue}33`, borderRadius: 20, padding: "3px 10px" }}>
+                          {g.name}{g.deadline ? ` · ${new Date(g.deadline).toLocaleDateString("en-US", { month: "short", year: "numeric" })}` : ""}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {perfGoals.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700,
+                      letterSpacing: "0.12em", marginBottom: 6 }}>PERFORMANCE GOALS</div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {perfGoals.map((g, i) => (
+                        <span key={i} style={{ fontSize: 11, fontFamily: F.body, background: C.accent + "20",
+                          color: C.accent, border: `1px solid ${C.accent}33`, borderRadius: 20, padding: "3px 10px" }}>
+                          {g.exercise} → {g.goalWeight} lbs
+                          {g.deadline ? ` · ${new Date(g.deadline).toLocaleDateString("en-US", { month: "short", year: "numeric" })}` : ""}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {wl?.length > 0 && (
+                  <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+                    <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted, fontWeight: 700,
+                      letterSpacing: "0.12em", marginBottom: 8 }}>WEIGHT LOG</div>
+                    <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+                      {wl.slice(0, 8).map((e, i) => (
+                        <div key={i} style={{ flexShrink: 0, textAlign: "center" }}>
+                          {e.photoUrls?.[0] && (
+                            <img src={e.photoUrls[0]} alt="" style={{ width: 44, height: 44,
+                              borderRadius: 8, objectFit: "cover", marginBottom: 4 }} />
+                          )}
+                          <div style={{ fontSize: 13, fontFamily: F.display, color: i === 0 ? C.accent : C.text }}>
+                            {e.weight} lbs
+                          </div>
+                          <div style={{ fontSize: 9, fontFamily: F.body, color: C.textMuted }}>{e.date}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Exercise tracker */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={S.label}>EXERCISE PROGRESS TRACKER</label>
+            <select value={selectedExercise} onChange={e => setSelectedExercise(e.target.value)}
+              style={{ ...S.input, fontFamily: F.body }}>
+              <option value="">— Select an exercise to track —</option>
+              {allExercises.map(name => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </div>
+
+          {selectedExercise && exerciseHistory.length > 0 && (
+            <>
+              <div style={{ ...S.card, border: `1px solid ${C.accent}44`, marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.15em" }}>
+                      BEST — {selectedExercise.toUpperCase()}
+                    </div>
+                    <div style={{ fontSize: 56, fontFamily: F.display, color: C.accent, lineHeight: 1, marginTop: 4 }}>
+                      {maxWeight > 0 ? maxWeight : "–"}{" "}
+                      <span style={{ fontSize: 24, color: C.textMuted }}>LBS</span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted }}>SESSIONS</div>
+                    <div style={{ fontSize: 40, fontFamily: F.display, color: C.accentBlue }}>
+                      {exerciseHistory.length}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {exerciseHistory.slice(-8).map((entry, i, arr) => {
+                    const pct = maxWeight > 0 ? (entry.topWeight / maxWeight) * 100 : 0;
+                    const isLatest = i === arr.length - 1;
+                    return (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, minWidth: 55 }}>
+                          {entry.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </div>
+                        <div style={{ flex: 1, height: 6, background: C.surface, borderRadius: 3, overflow: "hidden" }}>
+                          <div style={{ height: "100%", borderRadius: 3,
+                            background: isLatest ? C.accent : C.accentBlue + "88",
+                            width: `${pct}%`, transition: "width 0.5s ease" }} />
+                        </div>
+                        <div style={{ fontSize: 13, fontFamily: F.display,
+                          color: isLatest ? C.accent : C.text, minWidth: 65, textAlign: "right" }}>
+                          {entry.topWeight > 0 ? `${entry.topWeight}lbs` : "–"}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted }}>SESSIONS</div>
-                <div style={{ fontSize: 40, fontFamily: F.display, color: C.accentBlue }}>{exerciseHistory.length}</div>
-              </div>
-            </div>
 
-            {/* Progress bars */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {exerciseHistory.slice(-6).map((entry, i) => {
-                const pct = maxWeight > 0 ? (entry.topWeight / maxWeight) * 100 : 0;
-                const isLatest = i === exerciseHistory.slice(-6).length - 1;
+              <div style={S.card}>
+                <div style={{ fontSize: 16, fontFamily: F.display, marginBottom: 12 }}>SESSION BREAKDOWN</div>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: F.body, fontSize: 12 }}>
+                  <thead>
+                    <tr>
+                      {["DATE","WORKOUT","TOP WEIGHT","REPS","SETS DONE",""].map(h => (
+                        <th key={h} style={{ textAlign: "left", color: C.textMuted, fontWeight: 700,
+                          letterSpacing: "0.1em", paddingBottom: 10, fontSize: 10,
+                          borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {exerciseHistory.slice().reverse().map((entry, i) => (
+                      <tr key={i} style={{ borderTop: `1px solid ${C.border}` }}>
+                        <td style={{ padding: "10px 0", color: C.textMuted }}>
+                          {entry.date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
+                        </td>
+                        <td style={{ padding: "10px 0", fontFamily: F.display, fontSize: 14 }}>{entry.workoutName}</td>
+                        <td style={{ padding: "10px 0", fontFamily: F.display, fontSize: 16,
+                          color: i === 0 ? C.accent : C.text }}>
+                          {entry.topWeight > 0 ? entry.topWeight : "–"}{" "}
+                          <span style={{ fontSize: 10, color: C.textMuted }}>lbs</span>
+                        </td>
+                        <td style={{ padding: "10px 0", color: C.textMuted }}>{entry.topReps || "–"}</td>
+                        <td style={{ padding: "10px 0", color: C.accentGreen }}>{entry.completedSets}</td>
+                        <td style={{ padding: "10px 0" }}>
+                          <button onClick={() => setDetailedLog(entry.logId)}
+                            style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 6,
+                              padding: "4px 10px", color: C.textMuted, cursor: "pointer",
+                              fontSize: 11, fontFamily: F.body }}>VIEW</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {/* All workouts list */}
+          {!selectedExercise && (
+            <>
+              <div style={{ fontSize: 18, fontFamily: F.display, marginBottom: 12 }}>ALL WORKOUTS</div>
+              {clientLogs.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "48px 0", color: C.textMuted,
+                  fontFamily: F.body, fontSize: 13 }}>No workout history yet</div>
+              ) : clientLogs.slice(0, 30).map((log, i) => {
+                const client = clients.find(c => c.userId === log.userId || c.id === log.userId);
                 return (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, minWidth: 50 }}>
-                      {entry.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  <div key={log.id || i} onClick={() => setDetailedLog(log.id)}
+                    style={{ ...S.card, cursor: "pointer", display: "flex",
+                      justifyContent: "space-between", alignItems: "center" }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = C.borderLight}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
+                  >
+                    <div>
+                      <div style={{ fontSize: 16, fontFamily: F.display }}>{log.workoutName}</div>
+                      <div style={{ fontSize: 11, fontFamily: F.body, color: C.accentBlue, marginTop: 1 }}>
+                        {client?.name || client?.email || "Unknown client"}
+                      </div>
+                      <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, marginTop: 1 }}>
+                        {fmtDate(log.completedAt)}
+                        {log.duration ? ` · ${Math.floor(log.duration / 60)}min` : ""}
+                        {log.exercises ? ` · ${log.exercises.length} exercises` : ""}
+                      </div>
                     </div>
-                    <div style={{ flex: 1, height: 6, background: C.surface, borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{
-                        height: "100%", borderRadius: 3,
-                        background: isLatest ? C.accent : C.accentBlue + "88",
-                        width: `${pct}%`, transition: "width 0.5s ease"
-                      }} />
-                    </div>
-                    <div style={{ fontSize: 12, fontFamily: F.display, color: isLatest ? C.accent : C.text, minWidth: 60, textAlign: "right" }}>
-                      {entry.topWeight > 0 ? `${entry.topWeight}lbs` : "–"}
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      {log.rating && (
+                        <div style={{ fontFamily: F.display, fontSize: 18, color: C.accent }}>{log.rating}★</div>
+                      )}
+                      <div style={{ color: C.textDim, fontSize: 20 }}>›</div>
                     </div>
                   </div>
                 );
               })}
-            </div>
-          </div>
-
-          {/* Session history table */}
-          <div style={S.card}>
-            <div style={{ fontSize: 16, fontFamily: F.display, marginBottom: 12 }}>SESSION BREAKDOWN</div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: F.body, fontSize: 12 }}>
-              <thead>
-                <tr>
-                  {["DATE", "WORKOUT", "TOP WEIGHT", "REPS", "SETS DONE", ""].map(h => (
-                    <th key={h} style={{ textAlign: "left", color: C.textMuted, fontWeight: 700, letterSpacing: "0.1em", paddingBottom: 10, fontSize: 10, borderBottom: `1px solid ${C.border}` }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {exerciseHistory.slice().reverse().map((entry, i) => (
-                  <tr key={i} style={{ borderTop: `1px solid ${C.border}` }}>
-                    <td style={{ padding: "10px 0", color: C.textMuted }}>{entry.date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}</td>
-                    <td style={{ padding: "10px 0", fontFamily: F.display, fontSize: 14 }}>{entry.workoutName}</td>
-                    <td style={{ padding: "10px 0", fontFamily: F.display, fontSize: 16, color: i === 0 ? C.accent : C.text }}>
-                      {entry.topWeight > 0 ? `${entry.topWeight}` : "–"} <span style={{ fontSize: 10, color: C.textMuted }}>lbs</span>
-                    </td>
-                    <td style={{ padding: "10px 0", color: C.textMuted }}>{entry.topReps || "–"}</td>
-                    <td style={{ padding: "10px 0", color: C.accentGreen }}>{entry.completedSets}</td>
-                    <td style={{ padding: "10px 0" }}>
-                      <button onClick={() => setDetailedLog(entry.logId)} style={{
-                        background: "transparent", border: `1px solid ${C.border}`, borderRadius: 6,
-                        padding: "4px 10px", color: C.textMuted, cursor: "pointer", fontSize: 11, fontFamily: F.body
-                      }}>VIEW</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-
-      {selectedExercise && exerciseHistory.length === 0 && (
-        <div style={{ textAlign: "center", padding: "40px 0", color: C.textMuted, fontFamily: F.body, fontSize: 13 }}>
-          No data for this exercise yet
-        </div>
-      )}
-
-      {/* All workout logs */}
-      {!selectedExercise && (
-        <>
-          <div style={{ fontSize: 18, fontFamily: F.display, letterSpacing: "0.05em", marginBottom: 12 }}>ALL WORKOUTS</div>
-          {clientLogs.slice(0, 20).map((log, i) => (
-            <div key={log.id || i}
-              onClick={() => setDetailedLog(log.id)}
-              style={{ ...S.card, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <div style={{ fontSize: 16, fontFamily: F.display }}>{log.workoutName}</div>
-                <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>
-                  {log.completedAt?.toDate
-                    ? log.completedAt.toDate().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
-                    : log.completedAt ? new Date(log.completedAt).toLocaleDateString() : "–"}
-                  {log.duration ? ` · ${Math.floor(log.duration / 60)}min` : ""}
-                  {log.exercises ? ` · ${log.exercises.length} exercises` : ""}
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                {log.rating && <div style={{ fontFamily: F.display, fontSize: 18, color: C.accent }}>{log.rating}★</div>}
-                <div style={{ color: C.textDim, fontSize: 20 }}>›</div>
-              </div>
-            </div>
-          ))}
+            </>
+          )}
         </>
       )}
     </div>
   );
 }
 
-// ─── Programs Tab ─────────────────────────────────────────────────────────────
-function ProgramsTab() {
-  const phases = [
-    { name: "RESET", week: "1–2", color: C.accentBlue, desc: "Foundation movement patterns, mobility, habit building" },
-    { name: "REBUILD", week: "3–4", color: C.accentGreen, desc: "Progressive overload introduction, increasing intensity" },
-    { name: "STRENGTHEN", week: "5–6", color: C.accent, desc: "Compound lifts, strength targets, performance tracking" },
-    { name: "OWN IT", week: "7–8", color: C.accentRed, desc: "Peak performance week, client autonomy, sustainability" },
-  ];
+// ─── Trainer Tab (In-Person Coaching) ─────────────────────────────────────────
+function TrainerTab({ clients, workoutLogs }) {
+  const [programs, setPrograms] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [clientProgram, setClientProgram] = useState(null);
+  const [activeDay, setActiveDay] = useState(0);
+  const [sessionActive, setSessionActive] = useState(false);
+  const [sessionLog, setSessionLog] = useState({});
+  const [sessionStartTime, setSessionStartTime] = useState(null);
+  const [restTimer, setRestTimer] = useState(null);
+  const [restTimeLeft, setRestTimeLeft] = useState(0);
+  const [expandedEx, setExpandedEx] = useState(null);
+  const [sessionSaved, setSessionSaved] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const restInterval = useRef(null);
+  const tickRef = useRef(null);
 
-  const workouts = [
-    { day: "Monday", name: "Lower Body A", exercises: 4, focus: "Squat pattern, posterior chain" },
-    { day: "Wednesday", name: "Upper Body A", exercises: 4, focus: "Push/pull balance, shoulder health" },
-    { day: "Friday", name: "Full Body", exercises: 4, focus: "Compound movements, total body stimulus" },
-  ];
+  useEffect(() => {
+    getDocs(collection(db, "programs")).then(snap => {
+      setPrograms(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
 
-  return (
-    <div>
-      <div style={{ marginBottom: 24 }}>
-        <div style={S.sectionTitle}>PROGRAMS</div>
-        <div style={S.sectionSub}>REBUILD METHOD — 8 WEEK PLAN</div>
+  // Elapsed time ticker
+  useEffect(() => {
+    if (sessionActive) {
+      tickRef.current = setInterval(() => setNow(Date.now()), 30000);
+      return () => clearInterval(tickRef.current);
+    }
+  }, [sessionActive]);
+
+  // Rest timer countdown
+  useEffect(() => {
+    if (restTimer && restTimeLeft > 0) {
+      restInterval.current = setInterval(() => {
+        setRestTimeLeft(prev => {
+          if (prev <= 1) { clearInterval(restInterval.current); setRestTimer(null); return 0; }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(restInterval.current);
+    }
+  }, [restTimer]);
+
+  const selectClient = (client) => {
+    setSelectedClient(client);
+    const prog = programs.find(p => p.assignedClientId === client.id);
+    setClientProgram(prog || null);
+    setActiveDay(0);
+    setSessionActive(false);
+    setSessionLog({});
+    setSessionSaved(false);
+  };
+
+  const getLastWeight = (exerciseName) => {
+    const clientId = selectedClient?.userId || selectedClient?.id;
+    const clientLogsSorted = workoutLogs
+      .filter(l => l.userId === clientId)
+      .sort((a, b) => {
+        const da = a.completedAt?.toDate ? a.completedAt.toDate() : new Date(a.completedAt || 0);
+        const db2 = b.completedAt?.toDate ? b.completedAt.toDate() : new Date(b.completedAt || 0);
+        return db2 - da;
+      });
+    for (const log of clientLogsSorted) {
+      if (!log.exercises) continue;
+      for (const ex of log.exercises) {
+        if (ex.name === exerciseName && ex.sets) {
+          const lastSet = [...ex.sets].reverse().find(s => s.completed && parseFloat(s.weight) > 0);
+          if (lastSet) return lastSet.weight;
+        }
+      }
+    }
+    return null;
+  };
+
+  const startSession = () => {
+    if (!clientProgram) return;
+    const days = clientProgram.days || [];
+    const day = days[activeDay];
+    if (!day) return;
+    const log = {};
+    (day.blocks || []).forEach((block, bi) => {
+      (block.exercises || []).forEach((ex, ei) => {
+        const key = `${bi}-${ei}`;
+        const numSets = (ex.sets && ex.sets.length > 0) ? ex.sets.length : 3;
+        log[key] = {
+          sets: Array.from({ length: numSets }, () => ({ weight: "", reps: "", completed: false })),
+        };
+      });
+    });
+    setSessionLog(log);
+    setSessionStartTime(new Date());
+    setSessionActive(true);
+    setSessionSaved(false);
+    setNow(Date.now());
+  };
+
+  const toggleSet = (key, si) => {
+    setSessionLog(prev => {
+      const updated = JSON.parse(JSON.stringify(prev));
+      updated[key].sets[si].completed = !updated[key].sets[si].completed;
+      return updated;
+    });
+  };
+
+  const updateSetField = (key, si, field, value) => {
+    setSessionLog(prev => {
+      const updated = JSON.parse(JSON.stringify(prev));
+      updated[key].sets[si][field] = value;
+      return updated;
+    });
+  };
+
+  const addSet = (key) => {
+    setSessionLog(prev => {
+      const updated = JSON.parse(JSON.stringify(prev));
+      updated[key].sets.push({ weight: "", reps: "", completed: false });
+      return updated;
+    });
+  };
+
+  const startRest = (seconds) => {
+    clearInterval(restInterval.current);
+    setRestTimeLeft(seconds || 60);
+    setRestTimer(Date.now());
+  };
+
+  const fmtTimer = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+  const completedSetsCount = Object.values(sessionLog).reduce((a, ex) => a + ex.sets.filter(s => s.completed).length, 0);
+  const totalSetsCount = Object.values(sessionLog).reduce((a, ex) => a + ex.sets.length, 0);
+  const elapsedMin = sessionStartTime ? Math.floor((now - sessionStartTime) / 60000) : 0;
+
+  const saveSession = async () => {
+    if (!selectedClient || !clientProgram) return;
+    const day = (clientProgram.days || [])[activeDay];
+    if (!day) return;
+    const exercises = [];
+    (day.blocks || []).forEach((block, bi) => {
+      (block.exercises || []).forEach((ex, ei) => {
+        const key = `${bi}-${ei}`;
+        const exLog = sessionLog[key];
+        if (exLog) {
+          exercises.push({
+            name: ex.name,
+            blockLabel: block.label || String.fromCharCode(65 + bi),
+            sets: exLog.sets,
+          });
+        }
+      });
+    });
+    const logDoc = {
+      userId: selectedClient.userId || selectedClient.id,
+      programId: clientProgram.id,
+      programName: clientProgram.name,
+      workoutName: day.name || `Day ${activeDay + 1}`,
+      dayIndex: activeDay,
+      exercises,
+      completedAt: serverTimestamp(),
+      startedAt: sessionStartTime.toISOString(),
+      duration: Math.floor((Date.now() - sessionStartTime) / 1000),
+      loggedBy: "coach",
+    };
+    try {
+      await addDoc(collection(db, "workoutLogs"), logDoc);
+      setSessionSaved(true);
+    } catch (err) {
+      console.error("Save session error:", err);
+    }
+  };
+
+  // ── Client Selection ──
+  if (!selectedClient) {
+    return (
+      <div>
+        <div style={{ marginBottom: 24 }}>
+          <div style={S.sectionTitle}>TRAIN</div>
+          <div style={S.sectionSub}>SELECT A CLIENT FOR AN IN-PERSON SESSION</div>
+        </div>
+        {loading ? (
+          <div style={{ textAlign: "center", padding: "60px 0", color: C.textMuted, fontFamily: F.display }}>LOADING...</div>
+        ) : clients.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "60px 0" }}>
+            <div style={{ fontSize: 48, fontFamily: F.display, color: C.textDim }}>0</div>
+            <div style={{ fontFamily: F.body, color: C.textMuted, fontSize: 13 }}>No clients yet. Add clients from the Clients tab.</div>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
+            {clients.map(c => {
+              const prog = programs.find(p => p.assignedClientId === c.id);
+              const lastLog = workoutLogs.find(l => l.userId === (c.userId || c.id));
+              return (
+                <div key={c.id} onClick={() => selectClient(c)}
+                  style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, cursor: "pointer", transition: "all 0.2s" }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = C.accent + "66"}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = C.border}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: "50%", background: C.accent + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontFamily: F.display, color: C.accent, overflow: "hidden" }}>
+                      {c.photoUrl ? <img src={c.photoUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (c.name || "?")[0].toUpperCase()}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 18, fontFamily: F.display }}>{(c.name || "Unknown").toUpperCase()}</div>
+                      <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted }}>{c.email}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, fontFamily: F.body, color: prog ? C.accentGreen : C.textDim }}>
+                    {prog ? `◆ ${prog.name}` : "No program assigned"}
+                  </div>
+                  {lastLog && <div style={{ fontSize: 10, fontFamily: F.body, color: C.textDim, marginTop: 4 }}>Last: {fmtDate(lastLog.completedAt)}</div>}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
+    );
+  }
 
-      {/* Phases */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 28 }}>
-        {phases.map((phase, i) => (
-          <div key={i} style={{ background: C.card, border: `1px solid ${phase.color}44`, borderRadius: 10, padding: "16px" }}>
-            <div style={{ fontSize: 10, fontFamily: F.body, color: phase.color, fontWeight: 700, letterSpacing: "0.15em", marginBottom: 4 }}>
-              WK {phase.week}
+  // ── No Program Assigned ──
+  if (!clientProgram) {
+    return (
+      <div>
+        <button onClick={() => setSelectedClient(null)} style={{ ...S.btn("ghost"), fontSize: 12, padding: "6px 14px", marginBottom: 20 }}>← BACK</button>
+        <div style={{ textAlign: "center", padding: "60px 0" }}>
+          <div style={{ fontSize: 48, fontFamily: F.display, color: C.textDim }}>—</div>
+          <div style={{ fontFamily: F.display, fontSize: 22, marginTop: 12 }}>NO PROGRAM ASSIGNED</div>
+          <div style={{ fontFamily: F.body, color: C.textMuted, fontSize: 13, marginTop: 8 }}>
+            Assign a program to {selectedClient.name || "this client"} from the Programs tab first.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const days = clientProgram.days || [];
+  const day = days[activeDay];
+
+  // ── Active Session (Logging Sets) ──
+  if (sessionActive && day) {
+    return (
+      <div>
+        {/* Live header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: C.accentGreen, animation: "pulse 2s infinite" }} />
+            <span style={{ fontSize: 32, fontFamily: F.display, color: C.accentGreen }}>LIVE</span>
+            <span style={{ fontSize: 24, fontFamily: F.display }}>{(selectedClient.name || "").toUpperCase()}</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 20, fontFamily: F.body, fontSize: 12, color: C.textMuted }}>
+            <span>⏱ {elapsedMin} MIN</span>
+            <span style={{ color: C.accent, fontFamily: F.display, fontSize: 18 }}>{completedSetsCount}/{totalSetsCount} <span style={{ fontSize: 10, color: C.textMuted }}>SETS</span></span>
+          </div>
+        </div>
+        <div style={{ fontFamily: F.body, fontSize: 11, color: C.textDim, marginBottom: 16, letterSpacing: "0.1em" }}>
+          {clientProgram.name.toUpperCase()} → {(day.name || `DAY ${activeDay + 1}`).toUpperCase()}
+        </div>
+
+        {/* Rest Timer */}
+        {restTimer && (
+          <div style={{ background: C.accent + "15", border: `1px solid ${C.accent}33`, borderRadius: 10, padding: "12px 20px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontFamily: F.display, fontSize: 14, color: C.accent, letterSpacing: "0.1em" }}>REST TIMER</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <span style={{ fontSize: 32, fontFamily: F.display, color: restTimeLeft <= 10 ? C.accentRed : C.text }}>{fmtTimer(restTimeLeft)}</span>
+              <button onClick={() => { clearInterval(restInterval.current); setRestTimer(null); setRestTimeLeft(0); }} style={{ ...S.btn("ghost"), fontSize: 11, padding: "4px 10px" }}>✕</button>
             </div>
-            <div style={{ fontSize: 22, fontFamily: F.display, color: phase.color }}>{phase.name}</div>
-            <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 6, lineHeight: 1.5 }}>{phase.desc}</div>
+          </div>
+        )}
+
+        {/* Exercise Blocks */}
+        {(day.blocks || []).map((block, bi) => (
+          <div key={bi} style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 12, fontFamily: F.display, color: C.accent, letterSpacing: "0.15em", marginBottom: 8 }}>
+              BLOCK {String.fromCharCode(65 + bi)}{block.label ? ` — ${block.label.toUpperCase()}` : ""}
+            </div>
+            {(block.exercises || []).map((ex, ei) => {
+              const key = `${bi}-${ei}`;
+              const exLog = sessionLog[key];
+              if (!exLog) return null;
+              const allDone = exLog.sets.every(s => s.completed);
+              const isExpanded = expandedEx === key;
+              const lastWeight = getLastWeight(ex.name);
+
+              return (
+                <div key={key} style={{ background: allDone ? C.accentGreen + "08" : C.card, border: `1px solid ${allDone ? C.accentGreen + "44" : C.border}`, borderRadius: 10, marginBottom: 8, overflow: "hidden", transition: "all 0.2s" }}>
+                  {/* Exercise Header */}
+                  <div onClick={() => setExpandedEx(isExpanded ? null : key)}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", cursor: "pointer" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: "50%", background: allDone ? C.accentGreen : C.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontFamily: F.display, color: allDone ? "#000" : C.textMuted }}>
+                        {allDone ? "✓" : `${String.fromCharCode(65 + bi)}${ei + 1}`}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 16, fontFamily: F.display, letterSpacing: "0.03em" }}>{(ex.name || "UNNAMED").toUpperCase()}</div>
+                        <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>
+                          {exLog.sets.filter(s => s.completed).length}/{exLog.sets.length} sets{lastWeight ? ` · Last: ${lastWeight} lbs` : ""}
+                        </div>
+                      </div>
+                    </div>
+                    <span style={{ color: C.textDim, fontSize: 14 }}>{isExpanded ? "▾" : "▸"}</span>
+                  </div>
+
+                  {/* Expanded Logger */}
+                  {isExpanded && (
+                    <div style={{ padding: "0 18px 16px", borderTop: `1px solid ${C.border}` }}>
+                      {ex.coachNotes && (
+                        <div style={{ fontSize: 12, fontFamily: F.body, color: C.accent, padding: "10px 0 8px", fontStyle: "italic", borderBottom: `1px solid ${C.border}`, marginBottom: 10 }}>
+                          {ex.coachNotes}
+                        </div>
+                      )}
+                      {/* Prescribed */}
+                      <div style={{ fontSize: 10, fontFamily: F.body, color: C.textDim, marginBottom: 8, letterSpacing: "0.1em" }}>
+                        PRESCRIBED: {(ex.sets || []).map(s => `${s.reps || "?"}${s.weight ? " × " + s.weight : ""}`).join(" | ")}
+                      </div>
+                      {/* Set Grid */}
+                      <div style={{ display: "grid", gridTemplateColumns: "36px 1fr 1fr 44px 44px", gap: "6px 8px", alignItems: "center", fontSize: 12, fontFamily: F.body, marginBottom: 10 }}>
+                        <div style={{ color: C.textDim, fontWeight: 700, fontSize: 10, letterSpacing: "0.1em" }}>SET</div>
+                        <div style={{ color: C.textDim, fontWeight: 700, fontSize: 10, letterSpacing: "0.1em" }}>WEIGHT</div>
+                        <div style={{ color: C.textDim, fontWeight: 700, fontSize: 10, letterSpacing: "0.1em" }}>REPS</div>
+                        <div style={{ color: C.textDim, fontWeight: 700, fontSize: 10, letterSpacing: "0.1em", textAlign: "center" }}>✓</div>
+                        <div style={{ color: C.textDim, fontWeight: 700, fontSize: 10, letterSpacing: "0.1em", textAlign: "center" }}>REST</div>
+                        {exLog.sets.map((s, si) => (
+                          <React.Fragment key={si}>
+                            <div style={{ fontSize: 14, fontFamily: F.display, color: s.completed ? C.accentGreen : C.textMuted }}>{si + 1}</div>
+                            <input value={s.weight} onChange={e => updateSetField(key, si, "weight", e.target.value)}
+                              placeholder={ex.sets?.[si]?.weight || "lbs"}
+                              style={{ ...S.input, padding: "8px 10px", fontSize: 14, fontFamily: F.display, background: C.surface }} />
+                            <input value={s.reps} onChange={e => updateSetField(key, si, "reps", e.target.value)}
+                              placeholder={ex.sets?.[si]?.reps || "reps"}
+                              style={{ ...S.input, padding: "8px 10px", fontSize: 14, fontFamily: F.display, background: C.surface }} />
+                            <div style={{ textAlign: "center" }}>
+                              <button onClick={() => toggleSet(key, si)}
+                                style={{ width: 32, height: 32, borderRadius: "50%", border: `2px solid ${s.completed ? C.accentGreen : C.border}`, background: s.completed ? C.accentGreen : "transparent", cursor: "pointer", color: s.completed ? "#000" : C.textDim, fontSize: 14, display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
+                                {s.completed ? "✓" : ""}
+                              </button>
+                            </div>
+                            <div style={{ textAlign: "center" }}>
+                              <button onClick={() => startRest(ex.rest || 60)}
+                                style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 8px", cursor: "pointer", color: C.textMuted, fontSize: 11, fontFamily: F.display }}>
+                                ⏱
+                              </button>
+                            </div>
+                          </React.Fragment>
+                        ))}
+                      </div>
+                      <button onClick={() => addSet(key)} style={{ ...S.btn("ghost"), fontSize: 11, padding: "4px 10px" }}>+ ADD SET</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ))}
+
+        {/* Bottom Actions */}
+        <div style={{ display: "flex", gap: 12, marginTop: 24, paddingTop: 20, borderTop: `1px solid ${C.border}` }}>
+          {!sessionSaved ? (
+            <>
+              <button onClick={saveSession} style={{ ...S.btn("primary"), flex: 1, fontSize: 16 }}>
+                FINISH & SAVE ({completedSetsCount}/{totalSetsCount} SETS)
+              </button>
+              <button onClick={() => { if (confirm("End session without saving?")) { setSessionActive(false); setSessionLog({}); } }}
+                style={{ ...S.btn("ghost"), fontSize: 13 }}>CANCEL</button>
+            </>
+          ) : (
+            <div style={{ width: "100%", textAlign: "center", padding: 24 }}>
+              <div style={{ fontSize: 36, fontFamily: F.display, color: C.accentGreen, marginBottom: 8 }}>SESSION SAVED ✓</div>
+              <div style={{ fontFamily: F.body, fontSize: 13, color: C.textMuted, marginBottom: 20 }}>
+                {completedSetsCount} sets logged for {selectedClient.name} · {elapsedMin} min
+              </div>
+              <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+                <button onClick={() => { setSessionActive(false); setSessionLog({}); setSessionSaved(false); }}
+                  style={{ ...S.btn("primary"), fontSize: 14 }}>NEW SESSION</button>
+                <button onClick={() => setSelectedClient(null)}
+                  style={{ ...S.btn("ghost"), fontSize: 14 }}>← BACK TO CLIENTS</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Program Preview (Pre-Session) ──
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
+        <div>
+          <button onClick={() => setSelectedClient(null)} style={{ ...S.btn("ghost"), fontSize: 12, padding: "6px 14px", marginBottom: 12 }}>← BACK</button>
+          <div style={S.sectionTitle}>TRAIN: {(selectedClient.name || "").toUpperCase()}</div>
+          <div style={S.sectionSub}>{clientProgram.name.toUpperCase()} · {days.length} DAYS</div>
+        </div>
+        <button onClick={startSession} style={{ ...S.btn("primary"), fontSize: 16, padding: "12px 28px" }}>▶ START SESSION</button>
       </div>
 
-      {/* Workouts */}
-      <div style={{ fontSize: 18, fontFamily: F.display, marginBottom: 12 }}>WEEKLY STRUCTURE</div>
-      {workouts.map((w, i) => (
-        <div key={i} style={S.card}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontSize: 10, fontFamily: F.body, color: C.textMuted, fontWeight: 700, letterSpacing: "0.15em" }}>{w.day.toUpperCase()}</div>
-              <div style={{ fontSize: 22, fontFamily: F.display, marginTop: 2 }}>{w.name}</div>
-              <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>{w.focus}</div>
-            </div>
-            <span style={S.pill(C.accent)}>{w.exercises} exercises</span>
+      {/* Day tabs */}
+      {days.length > 1 && (
+        <div style={{ display: "flex", gap: 4, marginBottom: 20, flexWrap: "wrap" }}>
+          {days.map((d, di) => (
+            <button key={di} onClick={() => setActiveDay(di)} style={{
+              ...S.btn(activeDay === di ? "primary" : "ghost"),
+              fontSize: 13, padding: "8px 16px",
+            }}>{(d.name || `DAY ${di + 1}`).toUpperCase()}</button>
+          ))}
+        </div>
+      )}
+
+      {/* Day Preview */}
+      {day && (day.blocks || []).map((block, bi) => (
+        <div key={bi} style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 12, fontFamily: F.display, color: C.accent, letterSpacing: "0.15em", marginBottom: 8 }}>
+            BLOCK {String.fromCharCode(65 + bi)}{block.label ? ` — ${block.label.toUpperCase()}` : ""}
           </div>
+          {(block.exercises || []).map((ex, ei) => {
+            const lastWeight = getLastWeight(ex.name);
+            return (
+              <div key={ei} style={{ ...S.card }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ width: 24, height: 24, borderRadius: "50%", background: C.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontFamily: F.display, color: C.textMuted }}>
+                      {String.fromCharCode(65 + bi)}{ei + 1}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 16, fontFamily: F.display }}>{(ex.name || "UNNAMED").toUpperCase()}</div>
+                      <div style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, marginTop: 2 }}>
+                        {(ex.sets || []).map(s => `${s.reps || "?"}${s.weight ? " × " + s.weight : ""}`).join(" | ")}
+                        {lastWeight && <span style={{ color: C.accent, marginLeft: 8 }}>Last: {lastWeight} lbs</span>}
+                      </div>
+                    </div>
+                  </div>
+                  {ex.rest > 0 && <span style={{ fontSize: 10, fontFamily: F.body, color: C.textDim }}>⏱ {ex.rest}s rest</span>}
+                </div>
+                {ex.coachNotes && <div style={{ fontSize: 12, fontFamily: F.body, color: C.textMuted, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.border}`, fontStyle: "italic" }}>{ex.coachNotes}</div>}
+              </div>
+            );
+          })}
         </div>
       ))}
 
-      <div style={{ ...S.card, border: `1px solid ${C.border}`, marginTop: 8, display: "flex", alignItems: "center", gap: 14, padding: "20px" }}>
-        <div style={{ fontSize: 32 }}>📝</div>
-        <div>
-          <div style={{ fontSize: 18, fontFamily: F.display }}>MORE PROGRAMS COMING</div>
-          <div style={{ fontSize: 12, fontFamily: F.body, color: C.textMuted }}>Custom program builder in next update</div>
-        </div>
+      <div style={{ textAlign: "center", marginTop: 24 }}>
+        <button onClick={startSession} style={{ ...S.btn("primary"), fontSize: 18, padding: "14px 36px" }}>
+          ▶ START {(day?.name || `DAY ${activeDay + 1}`).toUpperCase()}
+        </button>
       </div>
     </div>
   );
@@ -681,52 +1429,83 @@ export default function App() {
   const [workoutLogs, setWorkoutLogs] = useState([]);
   const [liveFeed, setLiveFeed] = useState([]);
   const [selectedClientId, setSelectedClientId] = useState(null);
+  const [filterClientId, setFilterClientId] = useState(null);
+  const [viewLog, setViewLog] = useState(null);
+  const [clientUserData, setClientUserData] = useState({}); // uid -> user doc data
+  const [clientWeightLogs, setClientWeightLogs] = useState({}); // uid -> weight entries
+  const [clientCheckIns, setClientCheckIns] = useState({}); // uid -> { date -> checkin }
   const liveFeedUnsub = useRef(null);
 
-  // Auth
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, u => { setUser(u); setAuthLoaded(true); });
     return unsub;
   }, []);
 
-  // Load data
+  // Keep loadData for manual refresh on client add
   const loadData = async () => {
     try {
-      // Clients
       const clientSnap = await getDocs(collection(db, "clients"));
       setClients(clientSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-
-      // Workout logs
-      const logsQ = query(collection(db, "workoutLogs"), orderBy("completedAt", "desc"));
-      const logsSnap = await getDocs(logsQ);
-      setWorkoutLogs(logsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch (e) { console.error("Load error:", e); }
+    } catch (e) { console.error("loadData:", e); }
   };
 
-  // Live feed listener
-  const startLiveFeed = () => {
-    if (liveFeedUnsub.current) liveFeedUnsub.current();
-    const q = query(collection(db, "setSyncs"), orderBy("timestamp", "desc"));
-    liveFeedUnsub.current = onSnapshot(q, snap => {
-      const items = snap.docs.slice(0, 20).map(d => ({ id: d.id, ...d.data() }));
-      setLiveFeed(items);
-    });
-  };
+  const unsubCoachRefs = useRef([]);
+  const cleanupCoach = () => { unsubCoachRefs.current.forEach(u=>{try{u();}catch{}}); unsubCoachRefs.current=[]; };
 
   useEffect(() => {
-    if (!user) return;
-    loadData();
-    startLiveFeed();
-    return () => { if (liveFeedUnsub.current) liveFeedUnsub.current(); };
+    if (!user) { cleanupCoach(); return; }
+
+    // ── Clients — real-time ──────────────────────────────────────────────────
+    const unsubClients = onSnapshot(collection(db, "clients"), snap => {
+      const clientList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setClients(clientList);
+      // For each linked client, subscribe to their user doc + weight log
+      clientList.forEach(client => {
+        const uid = client.userId;
+        if (!uid) return;
+        // User doc (profile, goals, wellbeing)
+        const unsubUD = onSnapshot(doc(db, "users", uid), udSnap => {
+          if (!udSnap.exists()) return;
+          setClientUserData(prev => ({ ...prev, [uid]: udSnap.data() }));
+        }, () => {});
+        unsubCoachRefs.current.push(unsubUD);
+        // Weight log
+        const wlQ = query(collection(db, "weightLog"), where("userId", "==", uid), orderBy("updatedAt", "desc"));
+        const unsubWL = onSnapshot(wlQ, wlSnap => {
+          setClientWeightLogs(prev => ({ ...prev, [uid]: wlSnap.docs.map(d => ({ id: d.id, ...d.data() })) }));
+        }, () => {});
+        unsubCoachRefs.current.push(unsubWL);
+        // Daily check-ins — last 30 days
+        const ciQ = query(collection(db, "checkIns"), where("userId", "==", uid), orderBy("updatedAt", "desc"));
+        const unsubCI = onSnapshot(ciQ, ciSnap => {
+          const byDate = {};
+          ciSnap.docs.forEach(d => { byDate[d.data().date] = d.data(); });
+          setClientCheckIns(prev => ({ ...prev, [uid]: byDate }));
+        }, () => {});
+        unsubCoachRefs.current.push(unsubCI);
+      });
+    }, err => console.warn("clients listener:", err));
+    unsubCoachRefs.current.push(unsubClients);
+
+    // ── Workout logs — real-time ─────────────────────────────────────────────
+    const logsQ = query(collection(db, "workoutLogs"), orderBy("completedAt", "desc"));
+    const unsubLogs = onSnapshot(logsQ, snap => {
+      setWorkoutLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, err => console.warn("logs listener:", err));
+    unsubCoachRefs.current.push(unsubLogs);
+
+    // ── Live set feed — real-time ────────────────────────────────────────────
+    if (liveFeedUnsub.current) liveFeedUnsub.current();
+    const feedQ = query(collection(db, "setSyncs"), orderBy("timestamp", "desc"));
+    liveFeedUnsub.current = onSnapshot(feedQ, snap => {
+      setLiveFeed(snap.docs.slice(0, 30).map(d => ({ id: d.id, ...d.data() })));
+    }, err => console.warn("feed listener:", err));
+    unsubCoachRefs.current.push(liveFeedUnsub.current);
+
+    return () => { cleanupCoach(); if(liveFeedUnsub.current) liveFeedUnsub.current(); };
   }, [user]);
 
-  if (!authLoaded) {
-    return (
-      <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ fontSize: 36, fontFamily: F.display, color: C.accent, letterSpacing: "0.1em" }}>LOADING...</div>
-      </div>
-    );
-  }
+  if (!authLoaded) return <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ fontSize: 36, fontFamily: F.display, color: C.accent, letterSpacing: "0.1em" }}>LOADING...</div></div>;
   if (!user) return <LoginScreen />;
 
   const navItems = [
@@ -734,6 +1513,7 @@ export default function App() {
     { id: "clients", label: "CLIENTS" },
     { id: "progress", label: "PROGRESS" },
     { id: "programs", label: "PROGRAMS" },
+    { id: "train", label: "TRAIN" },
   ];
 
   return (
@@ -746,14 +1526,12 @@ export default function App() {
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 2px; }
+        input::placeholder, textarea::placeholder { color: ${C.textDim}; }
+        textarea { font-family: ${F.body}; color: ${C.text}; background: ${C.surface}; }
       `}</style>
 
       {/* Top nav */}
-      <div style={{
-        position: "sticky", top: 0, zIndex: 100,
-        background: C.surface, borderBottom: `1px solid ${C.border}`,
-        display: "flex", alignItems: "center", padding: "0 32px", height: 56,
-      }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 100, background: C.surface, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 32px", height: 56 }}>
         <div style={{ marginRight: 40 }}>
           <span style={{ fontSize: 22, color: C.accent }}>FRAME</span>
           <span style={{ fontSize: 22, color: C.text }}>WERKS</span>
@@ -767,61 +1545,48 @@ export default function App() {
               borderBottom: `2px solid ${tab === item.id ? C.accent : "transparent"}`,
               color: tab === item.id ? C.accent : C.textMuted,
               padding: "0 16px", height: 56, cursor: "pointer",
-              fontFamily: F.display, fontSize: 14, letterSpacing: "0.1em",
-              transition: "all 0.15s",
-            }}>
-              {item.label}
-            </button>
+              fontFamily: F.display, fontSize: 14, letterSpacing: "0.1em", transition: "all 0.15s",
+            }}>{item.label}</button>
           ))}
         </div>
-        {/* Live indicator */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: 20 }}>
-          <div style={{
-            width: 8, height: 8, borderRadius: "50%",
-            background: liveFeed.length > 0 ? C.accentRed : C.textDim,
-            animation: liveFeed.length > 0 ? "pulse 1.5s infinite" : "none"
-          }} />
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: liveFeed.length > 0 ? C.accentRed : C.textDim, animation: liveFeed.length > 0 ? "pulse 1.5s infinite" : "none" }} />
           <span style={{ fontSize: 11, fontFamily: F.body, color: C.textMuted, letterSpacing: "0.1em" }}>
             {liveFeed.length > 0 ? `${liveFeed.length} LIVE` : "NO ACTIVITY"}
           </span>
         </div>
-        {/* User */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {user.photoURL && (
-            <img src={user.photoURL} alt="" style={{ width: 30, height: 30, borderRadius: "50%", border: `1px solid ${C.border}` }} />
-          )}
+          {user.photoURL && <img src={user.photoURL} alt="" style={{ width: 30, height: 30, borderRadius: "50%", border: `1px solid ${C.border}` }} />}
           <button onClick={() => signOut(auth)} style={{ ...S.btn("dim"), fontSize: 11, padding: "6px 12px" }}>SIGN OUT</button>
         </div>
       </div>
 
-      {/* Content */}
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 32px 60px" }}>
         {tab === "overview" && (
           <OverviewTab
-            clients={clients}
-            workoutLogs={workoutLogs}
-            liveFeed={liveFeed}
-            onSelectClient={id => { setSelectedClientId(id); setTab("progress"); }}
+            clients={clients} workoutLogs={workoutLogs} liveFeed={liveFeed}
+            filterClientId={filterClientId} onFilterClient={setFilterClientId}
+            onViewLog={(log) => { setViewLog(log.id); setTab("progress"); }}
           />
         )}
         {tab === "clients" && (
           <ClientsTab
-            clients={clients}
-            workoutLogs={workoutLogs}
-            selectedClientId={selectedClientId}
-            onSelectClient={id => { setSelectedClientId(id); setTab("progress"); }}
+            clients={clients} workoutLogs={workoutLogs}
+            clientUserData={clientUserData} clientWeightLogs={clientWeightLogs}
             onAddClient={loadData}
+            onSelectClient={(client) => { setSelectedClientId(client.userId || client.id); setTab("progress"); }}
           />
         )}
         {tab === "progress" && (
           <ProgressTab
-            clients={clients}
-            workoutLogs={workoutLogs}
-            selectedClientId={selectedClientId}
-            onSelectClient={setSelectedClientId}
+            clients={clients} workoutLogs={workoutLogs}
+            clientUserData={clientUserData} clientWeightLogs={clientWeightLogs}
+            selectedClientId={selectedClientId} onSelectClient={setSelectedClientId}
+            viewLog={viewLog} onViewLog={setViewLog}
           />
         )}
-        {tab === "programs" && <ProgramsTab />}
+        {tab === "programs" && <ProgramsTab clients={clients} />}
+        {tab === "train" && <TrainerTab clients={clients} workoutLogs={workoutLogs} />}
       </div>
     </div>
   );
